@@ -276,8 +276,6 @@
             
             if (setupKey) {
                 localStorage.setItem('ninja_api_key', setupKey);
-                // Clear any old model cache if setting a new key via URL
-                localStorage.removeItem('ninja_working_model');
                 apiKey = setupKey;
                 window.history.replaceState({}, document.title, window.location.pathname);
                 showMessage("Nana's Ninja is Ready! 🪄");
@@ -315,8 +313,6 @@
         function saveApiKey() {
             const val = document.getElementById('api-key-input').value.trim();
             localStorage.setItem('ninja_api_key', val);
-            // Clear the auto-discovery cache when a new key is saved
-            localStorage.removeItem('ninja_working_model');
             apiKey = val;
             showMessage("Key Saved! ✅");
             showPage('home');
@@ -358,13 +354,8 @@
             resultArea.classList.remove('hidden');
             loader.classList.remove('hidden');
             resultContent.innerHTML = "";
-            const saveBtn = document.getElementById('save-btn');
-            if (saveBtn) saveBtn.classList.add('hidden');
+            document.getElementById('save-btn').classList.add('hidden');
 
-            // 1. STRICTLY v1 ENDPOINT. NO BETA.
-            const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-            
-            // 2. INJECT PERSONA DIRECTLY INTO PROMPT.
             const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temps in Celsius. Return ONLY a raw JSON object with keys: foodName, mode, temperature, time, and instructions. Do not use markdown formatting like ```json.";
             
             let finalPrompt = `[SYSTEM INSTRUCTIONS: ${systemPrompt}]\n\nUser Request: ${prompt}`;
@@ -381,49 +372,65 @@
                 contents = [{ parts: [{ text: finalPrompt }] }];
             }
 
-            try {
-                let response;
-                for (let i = 0; i < 3; i++) {
-                    try {
-                        // 3. BARE MINIMUM PAYLOAD. NO GENERATION CONFIG. NO SYSTEM INSTRUCTION.
-                        response = await fetch(url, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ contents: contents })
-                        });
-                        if (response.ok) break;
-                    } catch (e) {}
-                    await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
-                }
+            // CASCADE FALLBACK: Try robust, widely accessible models
+            const modelsToTry = [
+                'gemini-1.5-flash',
+                'gemini-1.5-flash-8b'
+            ];
 
-                if (!response || !response.ok) {
-                    const errData = await response.json().catch(() => ({}));
-                    console.error("API Error Payload:", errData);
-                    throw new Error(errData.error?.message || `Status ${response?.status}`);
-                }
-                
-                const data = await response.json();
-                let text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-                
-                // 4. AGGRESSIVE CLEANUP. Remove markdown if the AI adds it anyway.
-                text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-                const jsonMatch = text.match(/\{[\s\S]*\}/);
-                
-                if (jsonMatch) {
-                    text = jsonMatch[0];
-                } else {
-                    throw new Error("Could not find recipe data in the AI's response.");
-                }
-                
-                const result = JSON.parse(text);
-                displayResult(result);
-                return result;
+            let success = false;
+            let lastErrorMessage = "Unknown error";
+            let resultData = null;
 
-            } catch (err) {
-                resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. (Error: ${err.message}). If this keeps happening, generate a new API key.</p>`;
-                console.error(err);
-            } finally {
-                loader.classList.add('hidden');
+            for (const model of modelsToTry) {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+                
+                try {
+                    // PURE PAYLOAD: No generationConfig or systemInstruction to prevent formatting errors
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ contents: contents })
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        let text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                        
+                        text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                        const jsonMatch = text.match(/\{[\s\S]*\}/);
+                        
+                        if (jsonMatch) {
+                            resultData = JSON.parse(jsonMatch[0]);
+                            success = true;
+                            break; // Success! Break the loop.
+                        } else {
+                            lastErrorMessage = "The AI answered, but the recipe format was unreadable.";
+                        }
+                    } else {
+                        const errData = await response.json().catch(() => ({}));
+                        lastErrorMessage = errData.error?.message || `Status ${response.status} with ${model}`;
+                    }
+                } catch (e) {
+                    lastErrorMessage = e.message;
+                }
+            }
+
+            loader.classList.add('hidden');
+
+            if (success && resultData) {
+                displayResult(resultData);
+            } else {
+                // EXPLICIT DIAGNOSTIC ERROR
+                resultContent.innerHTML = `
+                    <div class="bg-red-50 p-4 border-2 border-red-300 rounded-xl mb-4 text-dark">
+                        <p class="text-xl font-bold mb-2 text-red-700">Nana, the connection failed.</p>
+                        <p class="mb-2 text-sm italic">${lastErrorMessage}</p>
+                        <p class="text-sm font-bold mt-2 border-t pt-2 border-red-200">
+                            If this persists, your Google API key is locked. Note: Google AI Studio now requires a Billing Account to be linked for UK/EU keys to access these models (even on the free tier). Please check your AI Studio settings or generate a new key.
+                        </p>
+                    </div>
+                `;
             }
         }
 
@@ -463,7 +470,7 @@
             const reader = new FileReader();
             reader.onload = async (e) => {
                 const base64 = e.target.result.split(',')[1];
-                const prompt = "Identify this food in the photo and give Ninja CRISPi settings (Mode, Temp in C, Time).";
+                const prompt = "Identify this food and give Ninja CRISPi settings (Mode, Temp in C, Time). Use simple British English.";
                 await callGemini(prompt, base64);
             };
             reader.readAsDataURL(file);
