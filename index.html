@@ -148,7 +148,7 @@
             <div class="card">
                 <h2 class="text-3xl font-bold mb-2">What's for Tea?</h2>
                 <p class="mb-4 text-lg bg-blue-50 p-3 rounded-lg border-2 border-blue-200">
-                    <strong>Nana's Tip:</strong> Tell me how many or the weight (e.g. "3 sausages" or "500g chips") so I can be more accurate!
+                    <strong>Nana's Tip:</strong> Tell me how many or the weight (e.g. "3 sausages") so I can be more accurate!
                 </p>
                 <textarea id="ingredient-input" placeholder="What are we cooking today?" rows="2"></textarea>
                 <button onclick="getRecipeIdea()" class="btn-massive mt-4 bg-green-200">
@@ -247,7 +247,7 @@
             <p class="mt-4 italic text-lg text-center">Note: Always check that meat is piping hot!</p>
         </section>
 
-        <!-- SETTINGS PAGE -->
+        <!-- SETTINGS PAGE (Hidden) -->
         <section id="page-settings" class="hidden">
             <h2 class="text-4xl font-black mb-6">App Settings</h2>
             <div class="card">
@@ -272,13 +272,13 @@
     </nav>
 
     <script>
-        // Use empty string to allow environment auto-injection in preview
-        const apiKey = "";
+        // Use an empty string for platform injection
+        const apiKeyEnv = "";
 
-        function getEffectiveApiKey() {
-            const savedKey = localStorage.getItem('ninja_api_key');
-            if (savedKey && savedKey.trim() !== "") return savedKey.trim();
-            return apiKey; 
+        function getEffectiveKey() {
+            const saved = localStorage.getItem('ninja_api_key');
+            if (saved && saved.trim().length > 10) return saved.trim();
+            return apiKeyEnv;
         }
 
         let currentResult = null;
@@ -290,7 +290,6 @@
 
         const britishClassics = [
             { name: "Perfect Roast Chicken", mode: "Air Fry", temp: "190°C", time: "45-55 mins", instructions: "Season well. Place breast side down first, then flip halfway through." },
-            { name: "The Best Toasted Sandwich", mode: "Air Fry", temp: "200°C", time: "8 mins", instructions: "Butter the outside of the bread. Add cheese and ham. Flip after 5 mins." },
             { name: "Crispy Fish Fingers", mode: "Max Crisp", temp: "210°C", time: "10-12 mins", instructions: "Spread evenly. No need for extra oil. Shake halfway." },
             { name: "Quick Apple Crumble", mode: "Bake", temp: "170°C", time: "20 mins", instructions: "Cook fruit first for 5 mins, add topping, then bake until golden." },
             { name: "Pork Sausages", mode: "Air Fry", temp: "180°C", time: "12-15 mins", instructions: "Prick skins slightly. Shake the basket halfway through." }
@@ -301,17 +300,15 @@
             const setupKey = urlParams.get('setup');
             
             if (setupKey) {
-                const cleanKey = setupKey.trim();
-                localStorage.setItem('ninja_api_key', cleanKey);
+                localStorage.setItem('ninja_api_key', setupKey.trim());
                 window.history.replaceState({}, document.title, window.location.pathname);
                 showMessage("Nana's Ninja is Ready! 🪄");
-                const keyInput = document.getElementById('api-key-input');
-                if (keyInput) keyInput.value = cleanKey;
+                setTimeout(() => location.reload(), 1000);
             }
 
             loadRecipeOfDay();
             updateFavouritesList();
-            const currentKey = getEffectiveApiKey();
+            const currentKey = getEffectiveKey();
             if (document.getElementById('api-key-input')) {
                 document.getElementById('api-key-input').value = currentKey;
             }
@@ -343,13 +340,13 @@
 
         function saveApiKey() {
             const val = document.getElementById('api-key-input').value.trim();
+            if (val.length < 10) {
+                showMessage("That key looks too short, Nana!");
+                return;
+            }
             localStorage.setItem('ninja_api_key', val);
             showMessage("Key Saved! ✅");
-            setTimeout(() => {
-                showPage('home');
-                const cog = document.getElementById('settings-cog');
-                if (cog) cog.classList.add('hidden');
-            }, 1000);
+            setTimeout(() => location.reload(), 1000);
         }
 
         function toggleTextSize() {
@@ -375,9 +372,10 @@
         }
 
         async function callGemini(newPrompt, imageData = null) {
-            const currentKey = getEffectiveApiKey();
+            const currentKey = getEffectiveKey();
             const isCanvasPreview = window.location.hostname.includes('goog') || window.location.hostname === '';
-            
+            const hasSavedKey = !!localStorage.getItem('ninja_api_key');
+
             if (!currentKey && !isCanvasPreview) {
                 showMessage("I need setting up! Tap my face 5 times.");
                 return;
@@ -393,11 +391,11 @@
             const saveBtn = document.getElementById('save-btn');
             if (saveBtn) saveBtn.classList.add('hidden');
 
-            // Use gemini-1.5-flash which is widely available and stable on both standard keys and environment.
-            const modelName = "gemini-1.5-flash";
-            const apiVersion = "v1beta"; 
-            
-            const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${currentKey}`;
+            // MODEL LOGIC:
+            // For live site (hasSavedKey or external hostname), use stable 1.5-flash.
+            // For preview environment (goog hostname, no saved key), use the preview model.
+            const modelName = (isCanvasPreview && !hasSavedKey) ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${currentKey}`;
             
             let userParts = [{ text: newPrompt }];
             if (imageData) {
@@ -406,20 +404,16 @@
             
             chatHistory.push({ role: "user", parts: userParts });
 
-            const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English. For recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up questions, return a JSON object with keys: responseText and instructions (optional). Always use JSON format.";
+            const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using Ninja CRISPi cookers (Air Fryer, Ninja Pot, Pizza Oven). Give instructions in simple British English with temperatures in Celsius. For recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up, return a JSON object with keys: responseText and instructions. Only return JSON.";
 
             try {
-                // v1beta payload
                 let payload = {
                     contents: chatHistory,
                     systemInstruction: { parts: [{ text: systemPrompt }] },
-                    generationConfig: { 
-                        responseMimeType: "application/json" 
-                    }
+                    generationConfig: { responseMimeType: "application/json" }
                 };
 
                 let response;
-                // Exponential backoff retry logic
                 for (let i = 0; i < 5; i++) {
                     try {
                         response = await fetch(url, {
@@ -434,14 +428,12 @@
 
                 if (!response || !response.ok) {
                     const errData = await response.json().catch(() => ({}));
-                    console.error("Gemini API Error Response:", errData);
-                    throw new Error(errData.error?.message || `API failed with status ${response?.status}`);
+                    throw new Error(errData.error?.message || `Status ${response?.status}`);
                 }
                 
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
-                // Sanitize JSON response strings
                 text = text.replace(/```json/g, '').replace(/```/g, '').trim();
                 const result = JSON.parse(text);
                 
@@ -452,9 +444,9 @@
                 return result;
 
             } catch (err) {
-                console.error("Final Connection Error:", err);
+                console.error("Gemini Error:", err);
                 if (resultContent) {
-                    resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. Error: ${err.message}. Please check your internet or the API key link I sent you.</p>`;
+                    resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. (Error: ${err.message}). Please check the setup link I sent you.</p>`;
                 }
             } finally {
                 if (loader) loader.classList.add('hidden');
@@ -498,7 +490,6 @@
             const input = document.getElementById('follow-up-input');
             const question = input ? input.value.trim() : "";
             if (!question) return;
-            
             input.value = "";
             await callGemini(`Nana asks a follow-up: ${question}`);
         }
@@ -506,12 +497,11 @@
         async function handleImageUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
-
             const reader = new FileReader();
             reader.onload = async (e) => {
                 const base64 = e.target.result.split(',')[1];
                 resetApp(false); 
-                await callGemini("Identify this food in the photo and give Ninja CRISPi settings (Mode, Temp in C, Time). Use simple British English.", base64);
+                await callGemini("Identify this food in the photo and give Ninja settings (Mode, Temp in C, Time).", base64);
             };
             reader.readAsDataURL(file);
         }
@@ -524,7 +514,7 @@
                 return;
             }
             resetApp(false); 
-            await callGemini(`I have these ingredients: ${ingredients}. Suggest a simple British meal I can cook in my Ninja CRISPi.`);
+            await callGemini(`I have these ingredients: ${ingredients}. Suggest a simple British meal I can cook in my Ninja.`);
         }
 
         function resetApp(hideArea = true) {
@@ -567,7 +557,6 @@
                 list.innerHTML = `<p class="italic text-center">The tin is empty! Save some recipes from the Home screen.</p>`;
                 return;
             }
-
             list.innerHTML = favourites.map(f => `
                 <div class="card relative">
                     <button onclick="deleteFavourite(${f.id})" class="absolute top-2 right-2 text-2xl p-2">🗑️</button>
