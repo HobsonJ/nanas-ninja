@@ -274,9 +274,11 @@
     </nav>
 
     <script>
-        // The execution environment provides the key at runtime if apiKey is an empty string.
-        // On GitHub, the key is pulled from localStorage after the magic link setup.
-        const apiKey = localStorage.getItem('ninja_api_key') || "";
+        // Use a function to get the current key fresh from memory or environment
+        function getApiKey() {
+            return localStorage.getItem('ninja_api_key') || "";
+        }
+
         let currentResult = null;
         let isLargeText = false;
         let favourites = JSON.parse(localStorage.getItem('ninja_favourites') || "[]");
@@ -297,18 +299,20 @@
             const setupKey = urlParams.get('setup');
             
             if (setupKey) {
-                localStorage.setItem('ninja_api_key', setupKey);
-                // Remove the setup key from the URL to keep it clean
+                localStorage.setItem('ninja_api_key', setupKey.trim());
+                // Clean the URL
                 window.history.replaceState({}, document.title, window.location.pathname);
                 showMessage("Nana's Ninja is Ready! 🪄");
-                // Reload to ensure apiKey variable is updated from storage
-                setTimeout(() => location.reload(), 1000);
+                // Refresh the settings input if Nana is looking at it
+                const keyInput = document.getElementById('api-key-input');
+                if (keyInput) keyInput.value = setupKey.trim();
             }
 
             loadRecipeOfDay();
             updateFavouritesList();
+            const currentKey = getApiKey();
             if (document.getElementById('api-key-input')) {
-                document.getElementById('api-key-input').value = apiKey;
+                document.getElementById('api-key-input').value = currentKey;
             }
         };
 
@@ -341,7 +345,12 @@
             const val = document.getElementById('api-key-input').value.trim();
             localStorage.setItem('ninja_api_key', val);
             showMessage("Key Saved! ✅");
-            setTimeout(() => location.reload(), 500);
+            // Show Home page again
+            setTimeout(() => {
+                showPage('home');
+                const cog = document.getElementById('settings-cog');
+                if (cog) cog.classList.add('hidden');
+            }, 1000);
         }
 
         function toggleTextSize() {
@@ -367,8 +376,10 @@
         }
 
         async function callGemini(newPrompt, imageData = null) {
-            // Check for key only if we are likely outside of the Canvas environment
-            if (!apiKey && !window.location.hostname.includes('goog')) {
+            const currentKey = getApiKey();
+            // In the Canvas preview environment, hostname includes "goog".
+            // If we are NOT in the preview and there is no key, we can't make the call.
+            if (!currentKey && !window.location.hostname.includes('goog')) {
                 showMessage("I need setting up! Tap my face 5 times.");
                 return;
             }
@@ -382,9 +393,8 @@
             loader.classList.remove('hidden');
             document.getElementById('save-btn').classList.add('hidden');
 
-            // Use the required model for text generation in this environment
             const modelName = "gemini-2.5-flash-preview-09-2025";
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${currentKey}`;
             
             let userParts = [{ text: newPrompt }];
             if (imageData) {
@@ -435,7 +445,7 @@
 
             } catch (err) {
                 console.error("Final Connection Error:", err);
-                resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. Please check your internet or the API key link I sent you.</p>`;
+                resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. Please check your internet or use the setup link again.</p>`;
             } finally {
                 if (loader) loader.classList.add('hidden');
             }
