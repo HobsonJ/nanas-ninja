@@ -148,7 +148,7 @@
             <div class="card">
                 <h2 class="text-3xl font-bold mb-2">What's for Tea?</h2>
                 <p class="mb-4 text-lg bg-blue-50 p-3 rounded-lg border-2 border-blue-200">
-                    <strong>Nana's Tip:</strong> Tell me how many or the weight (e.g. "3 sausages") so I can be more accurate!
+                    <strong>Nana's Tip:</strong> Tell me what you have (e.g. "3 sausages") so I can be more accurate!
                 </p>
                 <textarea id="ingredient-input" placeholder="What are we cooking today?" rows="2"></textarea>
                 <button onclick="getRecipeIdea()" class="btn-massive mt-4 bg-green-200">
@@ -186,7 +186,7 @@
 
                 <div class="flex flex-col gap-3 mt-6">
                     <button id="save-btn" onclick="saveToFavourites()" class="btn-massive hidden bg-amber-100">
-                        ⭐ Save to Favourites Tin
+                        ⭐ Save to Tin
                     </button>
                     <button id="reset-btn" onclick="resetApp()" class="btn-massive bg-red-50 text-red-700">
                         🔄 Start Again
@@ -247,7 +247,7 @@
             <p class="mt-4 italic text-lg text-center">Note: Always check that meat is piping hot!</p>
         </section>
 
-        <!-- SETTINGS PAGE (Hidden) -->
+        <!-- SETTINGS PAGE -->
         <section id="page-settings" class="hidden">
             <h2 class="text-4xl font-black mb-6">App Settings</h2>
             <div class="card">
@@ -272,7 +272,7 @@
     </nav>
 
     <script>
-        // Use an empty string for platform injection check
+        // Platform provided key if empty
         const apiKeyEnv = "";
 
         function getEffectiveKey() {
@@ -290,8 +290,8 @@
 
         const britishClassics = [
             { name: "Perfect Roast Chicken", mode: "Air Fry", temp: "190°C", time: "45-55 mins", instructions: "Season well. Place breast side down first, then flip halfway through." },
-            { name: "Crispy Fish Fingers", mode: "Max Crisp", temp: "210°C", time: "10-12 mins", instructions: "Spread evenly. No need for extra oil. Shake halfway." },
-            { name: "Quick Apple Crumble", mode: "Bake", temp: "170°C", time: "20 mins", instructions: "Cook fruit first for 5 mins, add topping, then bake until golden." },
+            { name: "Crispy Fish Fingers", mode: "Max Crisp", temp: "210°C", time: "10-12 mins", instructions: "No need for extra oil. Shake halfway." },
+            { name: "Quick Apple Crumble", mode: "Bake", temp: "170°C", time: "20 mins", instructions: "Cook fruit first for 5 mins, add topping, bake until golden." },
             { name: "Pork Sausages", mode: "Air Fry", temp: "180°C", time: "12-15 mins", instructions: "Prick skins slightly. Shake the basket halfway through." }
         ];
 
@@ -391,11 +391,11 @@
             const saveBtn = document.getElementById('save-btn');
             if (saveBtn) saveBtn.classList.add('hidden');
 
-            // CRITICAL FIX: Always use v1beta for both environments to ensure 
-            // camelCase support for systemInstruction and responseMimeType.
-            // This prevents "Unknown name system instruction" errors on mobile.
-            const apiVersion = "v1beta"; 
-            const modelName = (isCanvasPreview && !hasSavedKey) ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
+            // --- CRITICAL SMART ENVIRONMENT DETECTION ---
+            // If we have a personal key (Live Site), we use the GA endpoint with snake_case.
+            // If we are in the Preview Environment (Canvas), we use the Beta endpoint with camelCase.
+            const apiVersion = isCanvasPreview && !hasSavedKey ? "v1beta" : "v1";
+            const modelName = isCanvasPreview && !hasSavedKey ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
             
             const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${currentKey}`;
             
@@ -406,20 +406,22 @@
             
             chatHistory.push({ role: "user", parts: userParts });
 
-            const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temperatures in Celsius. For recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up, return a JSON object with keys: responseText and instructions. Only return raw JSON.";
+            const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temperatures in Celsius. For initial recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up questions, return a JSON object with keys: responseText and instructions (optional). Always return raw JSON.";
 
             try {
-                // Construct payload using standard v1beta camelCase field names
-                let payload = {
-                    contents: chatHistory,
-                    systemInstruction: { parts: [{ text: systemPrompt }] },
-                    generationConfig: { 
-                        responseMimeType: "application/json" 
-                    }
-                };
+                let payload = { contents: chatHistory };
+
+                if (apiVersion === "v1beta") {
+                    // Testing Environment format
+                    payload.systemInstruction = { parts: [{ text: systemPrompt }] };
+                    payload.generationConfig = { responseMimeType: "application/json" };
+                } else {
+                    // Mobile / Live Site format (GA Standard)
+                    payload.system_instruction = { parts: [{ text: systemPrompt }] };
+                    payload.generation_config = { response_mime_type: "application/json" };
+                }
 
                 let response;
-                // Exponential backoff retry logic
                 for (let i = 0; i < 5; i++) {
                     try {
                         response = await fetch(url, {
@@ -441,7 +443,7 @@
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
-                // Sanitize JSON response strings
+                // Sanitize JSON
                 text = text.replace(/```json/g, '').replace(/```/g, '').trim();
                 const result = JSON.parse(text);
                 
@@ -452,7 +454,7 @@
                 return result;
 
             } catch (err) {
-                console.error("Final Connection Error:", err);
+                console.error("Connection Error:", err);
                 if (resultContent) {
                     resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. (Error: ${err.message}). Please check the setup link I sent you.</p>`;
                 }
@@ -470,7 +472,7 @@
                 resultContent.innerHTML = `
                     <h3 class="text-3xl font-bold mb-2">${result.foodName}</h3>
                     <div class="bg-amber-100 p-4 rounded-xl border-2 border-black mb-4">
-                        <p><strong>Ninja CRISPi Setting:</strong> ${result.mode}</p>
+                        <p><strong>Ninja Setting:</strong> ${result.mode}</p>
                         <p><strong>Temperature:</strong> ${result.temperature}°Celsius</p>
                         <p><strong>Time:</strong> ${result.time}</p>
                     </div>
@@ -526,7 +528,7 @@
         }
 
         function resetApp(hideArea = true) {
-            chatHistory = [];
+            chatHistory = []; // Reset Nana's memory
             currentResult = null;
             const ingredientInput = document.getElementById('ingredient-input');
             const followUpInput = document.getElementById('follow-up-input');
