@@ -272,7 +272,7 @@
     </nav>
 
     <script>
-        // Platform provided key if empty
+        // Use an empty string for platform injection check
         const apiKeyEnv = "";
 
         function getEffectiveKey() {
@@ -391,11 +391,10 @@
             const saveBtn = document.getElementById('save-btn');
             if (saveBtn) saveBtn.classList.add('hidden');
 
-            // --- CRITICAL SMART ENVIRONMENT DETECTION ---
-            // If we have a personal key (Live Site), we use the GA endpoint with snake_case.
-            // If we are in the Preview Environment (Canvas), we use the Beta endpoint with camelCase.
-            const apiVersion = isCanvasPreview && !hasSavedKey ? "v1beta" : "v1";
-            const modelName = isCanvasPreview && !hasSavedKey ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
+            // CRITICAL FIX: Always use v1beta to ensure systemInstruction and responseMimeType support.
+            // Model mapping: Preview environment uses preview model, Live site uses stable flash.
+            const apiVersion = "v1beta"; 
+            const modelName = (isCanvasPreview && !hasSavedKey) ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
             
             const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${currentKey}`;
             
@@ -409,19 +408,17 @@
             const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temperatures in Celsius. For initial recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up questions, return a JSON object with keys: responseText and instructions (optional). Always return raw JSON.";
 
             try {
-                let payload = { contents: chatHistory };
-
-                if (apiVersion === "v1beta") {
-                    // Testing Environment format
-                    payload.systemInstruction = { parts: [{ text: systemPrompt }] };
-                    payload.generationConfig = { responseMimeType: "application/json" };
-                } else {
-                    // Mobile / Live Site format (GA Standard)
-                    payload.system_instruction = { parts: [{ text: systemPrompt }] };
-                    payload.generation_config = { response_mime_type: "application/json" };
-                }
+                // v1beta JSON keys MUST be camelCase
+                let payload = {
+                    contents: chatHistory,
+                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                    generationConfig: { 
+                        responseMimeType: "application/json" 
+                    }
+                };
 
                 let response;
+                // Exponential backoff retry logic
                 for (let i = 0; i < 5; i++) {
                     try {
                         response = await fetch(url, {
@@ -454,7 +451,7 @@
                 return result;
 
             } catch (err) {
-                console.error("Connection Error:", err);
+                console.error("Final Connection Error:", err);
                 if (resultContent) {
                     resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. (Error: ${err.message}). Please check the setup link I sent you.</p>`;
                 }
@@ -528,7 +525,7 @@
         }
 
         function resetApp(hideArea = true) {
-            chatHistory = []; // Reset Nana's memory
+            chatHistory = []; // Correctly clear memory for the "Start Again" button
             currentResult = null;
             const ingredientInput = document.getElementById('ingredient-input');
             const followUpInput = document.getElementById('follow-up-input');
