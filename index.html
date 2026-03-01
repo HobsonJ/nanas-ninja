@@ -273,7 +273,15 @@
     </nav>
 
     <script>
-        // Use an empty string for platform injection check
+        // Global variables at the top to prevent ReferenceErrors
+        let tapCount = 0;
+        let tapTimer = null;
+        let isLargeText = false;
+        let favourites = JSON.parse(localStorage.getItem('ninja_favourites') || "[]");
+        let chatHistory = []; 
+        let currentResult = null;
+
+        // Platform auto-injection check
         const apiKeyEnv = "";
 
         function getEffectiveKey() {
@@ -281,13 +289,6 @@
             if (saved && saved.trim() !== "") return saved.trim();
             return apiKeyEnv; 
         }
-
-        let currentResult = null;
-        let isLargeText = false;
-        let favourites = JSON.parse(localStorage.getItem('ninja_favourites') || "[]");
-        let chatHistory = []; 
-        let tapCount = 0;
-        let tapTimer = null;
 
         const britishClassics = [
             { name: "Perfect Roast Chicken", mode: "Air Fry", temp: "190°C", time: "45-55 mins", instructions: "Season well. Place breast side down first, then flip halfway through." },
@@ -394,18 +395,25 @@
             const saveBtn = document.getElementById('save-btn');
             if (saveBtn) saveBtn.classList.add('hidden');
 
-            // --- CRITICAL FIX: UNIFIED ENDPOINT AND CAMELCASE ---
-            // Locked to v1beta for both environments.
-            const apiVersion = "v1beta"; 
-            
-            // Model Logic: 
-            // 1. If in Preview environment without a personal key -> gemini-2.5-flash-preview-09-2025
-            // 2. All other cases (Nana's phone with saved key) -> gemini-1.5-flash
+            // --- UNIVERSAL FIX ---
+            // 1. Put the system instructions directly into the history to avoid "Unknown name" errors on mobile.
+            // 2. Use v1beta for everyone to ensure "responseMimeType" works.
             const modelName = (isCanvasPreview && !hasSavedKey) ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
-            
-            const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${currentKey}`;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${currentKey}`;
             
             const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temperatures in Celsius. For recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up, return a JSON object with keys: responseText and instructions. Only return raw JSON.";
+
+            // Method: Conversation Injection (Universal Compatibility)
+            if (chatHistory.length === 0) {
+                chatHistory.push({
+                    role: "user",
+                    parts: [{ text: "SYSTEM INSTRUCTIONS: " + systemPrompt }]
+                });
+                chatHistory.push({
+                    role: "model",
+                    parts: [{ text: "Understood. I will strictly act as Nana's Ninja assistant and output JSON data." }]
+                });
+            }
 
             let userParts = [{ text: newPrompt }];
             if (imageData) {
@@ -415,10 +423,9 @@
             chatHistory.push({ role: "user", parts: userParts });
 
             try {
-                // v1beta JSON keys MUST be camelCase (e.g. systemInstruction, responseMimeType)
+                // Minimal payload to prevent device crashes
                 let payload = {
                     contents: chatHistory,
-                    systemInstruction: { parts: [{ text: systemPrompt }] },
                     generationConfig: { 
                         responseMimeType: "application/json" 
                     }
