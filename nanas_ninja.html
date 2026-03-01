@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nana’s Ninja - Recipe & Setting Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --cream: #FFFDF0;
+            --dark: #1a1a1a;
+            --accent: #d97706; 
+        }
+
+        body {
+            background-color: var(--cream);
+            color: var(--dark);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 22px; 
+            line-height: 1.5;
+            padding-bottom: 100px;
+        }
+
+        .extra-large-text {
+            font-size: 32px !important;
+        }
+
+        .btn-massive {
+            padding: 24px;
+            border-radius: 16px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            width: 100%;
+            border: 4px solid var(--dark);
+            transition: transform 0.1;
+            background-color: white;
+            color: var(--dark);
+            text-align: center;
+        }
+
+        .btn-massive:active {
+            transform: scale(0.98);
+            background-color: #f0f0f0;
+        }
+
+        .card {
+            background: white;
+            border: 3px solid var(--dark);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 24px;
+            box-shadow: 6px 6px 0px var(--dark);
+        }
+
+        .guide-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .guide-table th, .guide-table td {
+            border: 2px solid var(--dark);
+            padding: 12px;
+            text-align: left;
+        }
+
+        .guide-table th {
+            background-color: #eee;
+        }
+
+        input, textarea {
+            border: 3px solid var(--dark);
+            border-radius: 12px;
+            padding: 16px;
+            width: 100%;
+            font-size: 24px;
+            background: white;
+        }
+
+        .nav-item {
+            text-align: center;
+            padding: 15px;
+            flex: 1;
+            font-weight: bold;
+            border-top: 4px solid var(--dark);
+            background: white;
+        }
+
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--dark);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+    <!-- Header & Top Controls -->
+    <header class="p-6 flex flex-col items-center gap-4 bg-white border-b-4 border-black">
+        <div class="flex items-center gap-4">
+            <!-- Cartoon Avatar of Nana - Secret Trigger -->
+            <div onclick="handleSecretTap()" class="w-24 h-24 rounded-full border-4 border-black bg-amber-100 flex items-center justify-center overflow-hidden cursor-pointer select-none">
+                 <svg viewBox="0 0 100 100" class="w-full h-full">
+                    <circle cx="50" cy="45" r="35" fill="#fce7f3" /> <!-- Face -->
+                    <path d="M15 45 Q15 10 50 10 Q85 10 85 45" fill="#f3f4f6" /> <!-- Hair -->
+                    <circle cx="40" cy="45" r="3" fill="black" /> <!-- Eye L -->
+                    <circle cx="60" cy="45" r="3" fill="black" /> <!-- Eye R -->
+                    <path d="M42 60 Q50 68 58 60" stroke="black" stroke-width="2" fill="none" /> <!-- Smile -->
+                    <rect x="34" y="42" width="14" height="8" fill="none" stroke="black" stroke-width="1" /> <!-- Glass L -->
+                    <rect x="52" y="42" width="14" height="8" fill="none" stroke="black" stroke-width="1" /> <!-- Glass R -->
+                    <line x1="48" y1="46" x2="52" y2="46" stroke="black" /> <!-- Bridge -->
+                 </svg>
+            </div>
+            <div>
+                <h1 class="text-4xl font-black">Nana’s Ninja</h1>
+                <p class="text-xl">Cooking Made Easy</p>
+            </div>
+        </div>
+
+        <div class="flex gap-2 w-full max-w-md">
+            <button onclick="toggleTextSize()" class="btn-massive flex-1" style="padding: 12px; font-size: 20px;">
+                Aa Text Size
+            </button>
+            <button id="settings-cog" onclick="showPage('settings')" class="btn-massive w-16 hidden" style="padding: 12px; width: 80px;">
+                ⚙️
+            </button>
+        </div>
+    </header>
+
+    <main id="app-container" class="p-6 max-w-2xl mx-auto">
+        
+        <!-- MAIN HOME PAGE -->
+        <section id="page-home">
+            
+            <!-- What's for Tea? -->
+            <div class="card">
+                <h2 class="text-3xl font-bold mb-2">What's for Tea?</h2>
+                <p class="mb-4 text-lg bg-blue-50 p-3 rounded-lg border-2 border-blue-200">
+                    <strong>Nana's Tip:</strong> Tell me how many or the weight (e.g. "3 sausages" or "500g chips") so I can be more accurate!
+                </p>
+                <textarea id="ingredient-input" placeholder="What are we cooking today?" rows="2"></textarea>
+                <button onclick="getRecipeIdea()" class="btn-massive mt-4 bg-green-200">
+                    Get an Idea 💡
+                </button>
+            </div>
+
+            <!-- The Magic Camera -->
+            <div class="card bg-amber-50">
+                <h2 class="text-3xl font-bold mb-4">The Magic Camera</h2>
+                <p class="mb-4">Not sure what it is? Show me a photo!</p>
+                <label for="camera-upload" class="btn-massive bg-amber-400 cursor-pointer">
+                    <span class="text-4xl">📸</span> Take a Photo
+                </label>
+                <input type="file" id="camera-upload" accept="image/*" capture="environment" class="hidden" onchange="handleImageUpload(event)">
+            </div>
+
+            <!-- Result Section -->
+            <div id="result-area" class="card hidden border-green-600 border-4">
+                <div id="loader" class="flex flex-col items-center gap-4 py-4 hidden">
+                    <div class="loading-spinner"></div>
+                    <p>Thinking... please wait, Nana.</p>
+                </div>
+                
+                <div id="result-content" class="mb-6"></div>
+
+                <!-- Follow-up Section -->
+                <div id="follow-up-area" class="hidden border-t-2 border-gray-200 pt-4 mt-4">
+                    <p class="font-bold mb-2">Have a question about this?</p>
+                    <textarea id="follow-up-input" placeholder="e.g. Can I cook it from frozen?" rows="1"></textarea>
+                    <button onclick="askFollowUp()" class="btn-massive mt-3 bg-blue-100">
+                        Ask Nana 💬
+                    </button>
+                </div>
+
+                <div class="flex flex-col gap-3 mt-6">
+                    <button id="save-btn" onclick="saveToFavourites()" class="btn-massive hidden bg-amber-100">
+                        ⭐ Save to Favourites Tin
+                    </button>
+                    <button id="reset-btn" onclick="resetApp()" class="btn-massive bg-red-50 text-red-700">
+                        🔄 Start Again
+                    </button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 class="text-3xl font-bold mb-4">Recipe of the Day</h2>
+                <div id="recipe-of-the-day-content"></div>
+            </div>
+        </section>
+
+        <!-- FAVOURITES PAGE -->
+        <section id="page-favourites" class="hidden">
+            <h2 class="text-4xl font-black mb-6">The Favourites Tin</h2>
+            <div id="favourites-list">
+                <p>You haven't saved any recipes yet!</p>
+            </div>
+        </section>
+
+        <!-- GUIDE PAGE -->
+        <section id="page-guide" class="hidden">
+            <h2 class="text-4xl font-black mb-6">Ninja Quick Guide</h2>
+            <div class="card">
+                <table class="guide-table">
+                    <thead>
+                        <tr>
+                            <th>Setting</th>
+                            <th>Temp</th>
+                            <th>Best For...</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Air Fry</strong></td>
+                            <td>200°C</td>
+                            <td>General cooking</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Max Crisp</strong></td>
+                            <td>210°C</td>
+                            <td>Frozen chips or crispy skin</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Bake</strong></td>
+                            <td>160-190°C</td>
+                            <td>Cakes and pastries</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Recrisp</strong></td>
+                            <td>180°C</td>
+                            <td>Warming up leftovers</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="mt-4 italic text-lg text-center">Note: Always check that meat is piping hot!</p>
+        </section>
+
+        <!-- SETTINGS PAGE (Hidden) -->
+        <section id="page-settings" class="hidden">
+            <h2 class="text-4xl font-black mb-6">App Settings</h2>
+            <div class="card">
+                <p class="mb-4">This key lets the camera work. You only need to save it once.</p>
+                <input type="password" id="api-key-input" placeholder="Paste Key Here...">
+                <button onclick="saveApiKey()" class="btn-massive mt-4 bg-blue-100">
+                    Save Key
+                </button>
+                <button onclick="showPage('home')" class="btn-massive mt-4">
+                    Go Back
+                </button>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Navigation Bar -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-white flex border-t-4 border-black z-50">
+        <button onclick="showPage('home')" class="nav-item">🏠 Home</button>
+        <button onclick="showPage('favourites')" class="nav-item">⭐ Tin</button>
+        <button onclick="showPage('guide')" class="nav-item">📖 Guide</button>
+    </nav>
+
+    <script>
+        let apiKey = localStorage.getItem('ninja_api_key') || "";
+        let currentResult = null;
+        let isLargeText = false;
+        let favourites = JSON.parse(localStorage.getItem('ninja_favourites') || "[]");
+        let tapCount = 0;
+        let tapTimer = null;
+        let chatHistory = []; 
+
+        const britishClassics = [
+            { name: "Perfect Roast Chicken", mode: "Air Fry", temp: "190°C", time: "45-55 mins", instructions: "Season well. Place breast side down first, then flip halfway through." },
+            { name: "The Best Toasted Sandwich", mode: "Air Fry", temp: "200°C", time: "8 mins", instructions: "Butter the outside of the bread. Add cheese and ham. Flip after 5 mins." },
+            { name: "Crispy Fish Fingers", mode: "Max Crisp", temp: "210°C", time: "10-12 mins", instructions: "Spread evenly. No need for extra oil. Shake halfway." },
+            { name: "Quick Apple Crumble", mode: "Bake", temp: "170°C", time: "20 mins", instructions: "Cook fruit first for 5 mins, add topping, then bake until golden." },
+            { name: "Pork Sausages", mode: "Air Fry", temp: "180°C", time: "12-15 mins", instructions: "Prick skins slightly. Shake the basket halfway through." }
+        ];
+
+        window.onload = () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const setupKey = urlParams.get('setup');
+            
+            if (setupKey) {
+                localStorage.setItem('ninja_api_key', setupKey);
+                apiKey = setupKey;
+                window.history.replaceState({}, document.title, window.location.pathname);
+                showMessage("Nana's Ninja is Ready! 🪄");
+            }
+
+            loadRecipeOfDay();
+            updateFavouritesList();
+            if (document.getElementById('api-key-input')) {
+                document.getElementById('api-key-input').value = apiKey;
+            }
+        };
+
+        function handleSecretTap() {
+            tapCount++;
+            clearTimeout(tapTimer);
+            tapTimer = setTimeout(() => { tapCount = 0; }, 1000);
+            if (tapCount >= 5) {
+                const cog = document.getElementById('settings-cog');
+                cog.classList.toggle('hidden');
+                showMessage(cog.classList.contains('hidden') ? "Settings Hidden" : "Settings Revealed! ⚙️");
+                tapCount = 0;
+            }
+        }
+
+        function showPage(pageId) {
+            ['home', 'favourites', 'guide', 'settings'].forEach(id => {
+                document.getElementById(`page-${id}`).classList.add('hidden');
+            });
+            document.getElementById(`page-${pageId}`).classList.remove('hidden');
+            window.scrollTo(0,0);
+        }
+
+        function saveApiKey() {
+            const val = document.getElementById('api-key-input').value.trim();
+            localStorage.setItem('ninja_api_key', val);
+            apiKey = val;
+            showMessage("Key Saved! ✅");
+            showPage('home');
+            document.getElementById('settings-cog').classList.add('hidden');
+        }
+
+        function toggleTextSize() {
+            isLargeText = !isLargeText;
+            document.body.classList.toggle('extra-large-text', isLargeText);
+            const inputs = document.querySelectorAll('input, textarea, .btn-massive, .nav-item');
+            inputs.forEach(el => el.classList.toggle('extra-large-text', isLargeText));
+        }
+
+        function loadRecipeOfDay() {
+            const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
+            const recipe = britishClassics[dayOfYear % britishClassics.length];
+            const container = document.getElementById('recipe-of-the-day-content');
+            if (container) {
+                container.innerHTML = `
+                    <h3 class="text-2xl font-bold text-amber-700">${recipe.name}</h3>
+                    <p><strong>Mode:</strong> ${recipe.mode}</p>
+                    <p><strong>Temp:</strong> ${recipe.temp}</p>
+                    <p><strong>Time:</strong> ${recipe.time}</p>
+                    <p class="mt-2">${recipe.instructions}</p>
+                `;
+            }
+        }
+
+        async function callGemini(newPrompt, imageData = null) {
+            if (!apiKey) {
+                showMessage("I need setting up! Tap my face 5 times.");
+                return;
+            }
+
+            const loader = document.getElementById('loader');
+            const resultArea = document.getElementById('result-area');
+            const resultContent = document.getElementById('result-content');
+            const followUpArea = document.getElementById('follow-up-area');
+            
+            resultArea.classList.remove('hidden');
+            loader.classList.remove('hidden');
+            document.getElementById('save-btn').classList.add('hidden');
+
+            // Using gemini-1.5-flash for maximum stability and to avoid 404 errors
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+            
+            let userParts = [{ text: newPrompt }];
+            if (imageData) {
+                userParts.push({ inlineData: { mimeType: "image/jpeg", data: imageData } });
+            }
+            
+            chatHistory.push({ role: "user", parts: userParts });
+
+            const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English. For initial recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up questions, return a JSON object with keys: responseText and instructions (optional). Always use JSON format.";
+
+            try {
+                let response;
+                // Retry logic with exponential backoff
+                for (let i = 0; i < 5; i++) {
+                    try {
+                        response = await fetch(url, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                contents: chatHistory,
+                                systemInstruction: { parts: [{ text: systemPrompt }] },
+                                generationConfig: { responseMimeType: "application/json" }
+                            })
+                        });
+                        if (response.ok) break;
+                    } catch (e) {}
+                    await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
+                }
+
+                if (!response || !response.ok) throw new Error("API failed");
+                
+                const data = await response.json();
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                const result = JSON.parse(text);
+                
+                chatHistory.push({ role: "model", parts: [{ text: text }] });
+                
+                displayResult(result);
+                followUpArea.classList.remove('hidden');
+                return result;
+
+            } catch (err) {
+                resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. Please check the internet or your API key settings.</p>`;
+                console.error(err);
+            } finally {
+                loader.classList.add('hidden');
+            }
+        }
+
+        function displayResult(result) {
+            currentResult = result;
+            const resultContent = document.getElementById('result-content');
+            
+            if (result.foodName) {
+                resultContent.innerHTML = `
+                    <h3 class="text-3xl font-bold mb-2">${result.foodName}</h3>
+                    <div class="bg-amber-100 p-4 rounded-xl border-2 border-black mb-4">
+                        <p><strong>Ninja Setting:</strong> ${result.mode}</p>
+                        <p><strong>Temperature:</strong> ${result.temperature}°Celsius</p>
+                        <p><strong>Time:</strong> ${result.time}</p>
+                    </div>
+                    <p class="mb-2"><strong>Nana's Recipe:</strong></p>
+                    <p>${result.instructions}</p>
+                `;
+                document.getElementById('save-btn').classList.remove('hidden');
+            } else {
+                const followUpHtml = `
+                    <div class="bg-blue-50 p-4 rounded-xl border-2 border-blue-300 mb-4 mt-4">
+                        <p class="text-lg italic mb-2">Nana's Answer:</p>
+                        <p class="font-bold mb-2">${result.responseText || 'Here is what I found:'}</p>
+                        ${result.instructions ? `<p>${result.instructions}</p>` : ''}
+                    </div>
+                `;
+                resultContent.innerHTML += followUpHtml;
+            }
+            
+            document.getElementById('result-area').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        async function askFollowUp() {
+            const input = document.getElementById('follow-up-input');
+            const question = input.value.trim();
+            if (!question) return;
+            
+            input.value = "";
+            await callGemini(`Nana asks a follow-up: ${question}`);
+        }
+
+        async function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const base64 = e.target.result.split(',')[1];
+                resetApp(false); 
+                await callGemini("Identify this food in the photo and give Ninja CRISPi settings (Mode, Temp in C, Time). Use simple British English.", base64);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function getRecipeIdea() {
+            const input = document.getElementById('ingredient-input');
+            const ingredients = input.value.trim();
+            if (!ingredients) {
+                showMessage("Tell me what you have first, Nana!");
+                return;
+            }
+            resetApp(false); 
+            await callGemini(`I have these ingredients: ${ingredients}. Suggest a simple British meal I can cook in my Ninja CRISPi.`);
+        }
+
+        function resetApp(hideArea = true) {
+            chatHistory = [];
+            currentResult = null;
+            document.getElementById('ingredient-input').value = "";
+            document.getElementById('follow-up-input').value = "";
+            document.getElementById('result-content').innerHTML = "";
+            if (hideArea) {
+                document.getElementById('result-area').classList.add('hidden');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        }
+
+        function saveToFavourites() {
+            if (!currentResult || !currentResult.foodName) return;
+            favourites.push({ ...currentResult, id: Date.now() });
+            localStorage.setItem('ninja_favourites', JSON.stringify(favourites));
+            updateFavouritesList();
+            showMessage("Saved to the Tin! ⭐");
+        }
+
+        function deleteFavourite(id) {
+            favourites = favourites.filter(f => f.id !== id);
+            localStorage.setItem('ninja_favourites', JSON.stringify(favourites));
+            updateFavouritesList();
+        }
+
+        function updateFavouritesList() {
+            const list = document.getElementById('favourites-list');
+            if (!list) return;
+            if (favourites.length === 0) {
+                list.innerHTML = `<p class="italic text-center">The tin is empty! Save some recipes from the Home screen.</p>`;
+                return;
+            }
+
+            list.innerHTML = favourites.map(f => `
+                <div class="card relative">
+                    <button onclick="deleteFavourite(${f.id})" class="absolute top-2 right-2 text-2xl p-2">🗑️</button>
+                    <h3 class="text-2xl font-bold mb-2">${f.foodName}</h3>
+                    <p class="text-sm border-b pb-2 mb-2">${f.mode} | ${f.temperature}°C | ${f.time}</p>
+                    <p class="text-lg">${f.instructions}</p>
+                </div>
+            `).join('');
+        }
+
+        function showMessage(msg) {
+            const div = document.createElement('div');
+            div.className = "fixed top-10 left-1/2 -translate-x-1/2 bg-black text-white px-8 py-4 rounded-full font-bold shadow-2xl z-[100] text-center w-64";
+            div.textContent = msg;
+            document.body.appendChild(div);
+            setTimeout(() => div.remove(), 2500);
+        }
+    </script>
+</body>
+</html>
