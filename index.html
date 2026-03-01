@@ -396,21 +396,17 @@
             if (saveBtn) saveBtn.classList.add('hidden');
 
             // --- THE STABILITY FIX ---
-            // Use v1beta endpoint for everyone to get JSON support.
-            const apiVersion = "v1beta"; 
-            
-            // Environment Logic: 
-            // 1. If in Preview environment without a personal key -> gemini-2.5-flash-preview-09-2025
-            // 2. All other cases (Nana's phone with saved key) -> gemini-1.5-flash
-            const modelName = (isCanvasPreview && !hasSavedKey) ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
+            // Detect if we should use the stable 'v1' or the testing 'v1beta' endpoint.
+            // Personal keys (Live Site) using 1.5-flash must use 'v1' to avoid 'model not found' errors.
+            const usePreviewModel = isCanvasPreview && !hasSavedKey;
+            const apiVersion = usePreviewModel ? "v1beta" : "v1";
+            const modelName = usePreviewModel ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
             
             const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${currentKey}`;
             
             const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temperatures in Celsius. For recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up, return a JSON object with keys: responseText and instructions. Only return raw JSON.";
 
-            // --- UNIVERSAL HISTORY METHOD ---
-            // Bypass "systemInstruction" errors by putting instructions directly into the history.
-            // This works on every Gemini tier and version.
+            // Universal History Method: Move instructions into the history to bypass field errors.
             if (chatHistory.length === 0) {
                 chatHistory.push({
                     role: "user",
@@ -430,16 +426,16 @@
             chatHistory.push({ role: "user", parts: userParts });
 
             try {
-                // v1beta JSON keys MUST be camelCase
-                let payload = {
-                    contents: chatHistory,
-                    generationConfig: { 
-                        responseMimeType: "application/json" 
-                    }
-                };
+                let payload = { contents: chatHistory };
+                
+                // Adjust naming convention based on API version (v1 is snake_case, v1beta is camelCase)
+                if (apiVersion === "v1beta") {
+                    payload.generationConfig = { responseMimeType: "application/json" };
+                } else {
+                    payload.generation_config = { response_mime_type: "application/json" };
+                }
 
                 let response;
-                // Exponential backoff retry logic
                 for (let i = 0; i < 5; i++) {
                     try {
                         response = await fetch(url, {
