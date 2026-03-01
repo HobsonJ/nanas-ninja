@@ -274,8 +274,9 @@
     </nav>
 
     <script>
-        // Use empty string to allow environment auto-injection in preview
-        let apiKey = localStorage.getItem('ninja_api_key') || "";
+        // The execution environment provides the key at runtime if apiKey is an empty string.
+        // On GitHub, the key is pulled from localStorage after the magic link setup.
+        const apiKey = localStorage.getItem('ninja_api_key') || "";
         let currentResult = null;
         let isLargeText = false;
         let favourites = JSON.parse(localStorage.getItem('ninja_favourites') || "[]");
@@ -297,7 +298,11 @@
             
             if (setupKey) {
                 localStorage.setItem('ninja_api_key', setupKey);
-                window.location.href = window.location.pathname; // Reload without query params
+                // Remove the setup key from the URL to keep it clean
+                window.history.replaceState({}, document.title, window.location.pathname);
+                showMessage("Nana's Ninja is Ready! 🪄");
+                // Reload to ensure apiKey variable is updated from storage
+                setTimeout(() => location.reload(), 1000);
             }
 
             loadRecipeOfDay();
@@ -314,8 +319,10 @@
 
             if (tapCount >= 5) {
                 const cog = document.getElementById('settings-cog');
-                cog.classList.toggle('hidden');
-                showMessage(cog.classList.contains('hidden') ? "Settings Hidden" : "Settings Revealed! ⚙️");
+                if (cog) {
+                    cog.classList.toggle('hidden');
+                    showMessage(cog.classList.contains('hidden') ? "Settings Hidden" : "Settings Revealed! ⚙️");
+                }
                 tapCount = 0;
             }
         }
@@ -334,7 +341,7 @@
             const val = document.getElementById('api-key-input').value.trim();
             localStorage.setItem('ninja_api_key', val);
             showMessage("Key Saved! ✅");
-            location.reload(); // Refresh to apply the new key
+            setTimeout(() => location.reload(), 500);
         }
 
         function toggleTextSize() {
@@ -360,6 +367,12 @@
         }
 
         async function callGemini(newPrompt, imageData = null) {
+            // Check for key only if we are likely outside of the Canvas environment
+            if (!apiKey && !window.location.hostname.includes('goog')) {
+                showMessage("I need setting up! Tap my face 5 times.");
+                return;
+            }
+
             const loader = document.getElementById('loader');
             const resultArea = document.getElementById('result-area');
             const resultContent = document.getElementById('result-content');
@@ -369,8 +382,9 @@
             loader.classList.remove('hidden');
             document.getElementById('save-btn').classList.add('hidden');
 
-            // Use the stable gemini-1.5-flash model for reliability on all devices
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+            // Use the required model for text generation in this environment
+            const modelName = "gemini-2.5-flash-preview-09-2025";
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
             
             let userParts = [{ text: newPrompt }];
             if (imageData) {
@@ -379,10 +393,11 @@
             
             chatHistory.push({ role: "user", parts: userParts });
 
-            const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English. For recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up questions, return a JSON object with keys: responseText and instructions (optional). Only return the JSON object.";
+            const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English. For recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up questions, return a JSON object with keys: responseText and instructions (optional). Only return the raw JSON object.";
 
             try {
                 let response;
+                // Exponential backoff retry logic
                 for (let i = 0; i < 5; i++) {
                     try {
                         response = await fetch(url, {
@@ -408,27 +423,28 @@
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
-                // Sanitize JSON response
+                // Sanitize JSON response strings
                 text = text.replace(/```json/g, '').replace(/```/g, '').trim();
                 const result = JSON.parse(text);
                 
                 chatHistory.push({ role: "model", parts: [{ text: text }] });
                 
                 displayResult(result);
-                followUpArea.classList.remove('hidden');
+                if (followUpArea) followUpArea.classList.remove('hidden');
                 return result;
 
             } catch (err) {
                 console.error("Final Connection Error:", err);
                 resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. Please check your internet or the API key link I sent you.</p>`;
             } finally {
-                loader.classList.add('hidden');
+                if (loader) loader.classList.add('hidden');
             }
         }
 
         function displayResult(result) {
             currentResult = result;
             const resultContent = document.getElementById('result-content');
+            if (!resultContent) return;
             
             if (result.foodName) {
                 resultContent.innerHTML = `
@@ -458,7 +474,7 @@
 
         async function askFollowUp() {
             const input = document.getElementById('follow-up-input');
-            const question = input.value.trim();
+            const question = input ? input.value.trim() : "";
             if (!question) return;
             
             input.value = "";
@@ -480,7 +496,7 @@
 
         async function getRecipeIdea() {
             const input = document.getElementById('ingredient-input');
-            const ingredients = input.value.trim();
+            const ingredients = input ? input.value.trim() : "";
             if (!ingredients) {
                 showMessage("Tell me what you have first, Nana!");
                 return;
@@ -492,11 +508,16 @@
         function resetApp(hideArea = true) {
             chatHistory = [];
             currentResult = null;
-            document.getElementById('ingredient-input').value = "";
-            document.getElementById('follow-up-input').value = "";
-            document.getElementById('result-content').innerHTML = "";
+            const ingredientInput = document.getElementById('ingredient-input');
+            const followUpInput = document.getElementById('follow-up-input');
+            const resultContent = document.getElementById('result-content');
+            
+            if (ingredientInput) ingredientInput.value = "";
+            if (followUpInput) followUpInput.value = "";
+            if (resultContent) resultContent.innerHTML = "";
             if (hideArea) {
-                document.getElementById('result-area').classList.add('hidden');
+                const resultArea = document.getElementById('result-area');
+                if (resultArea) resultArea.classList.add('hidden');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             }
         }
