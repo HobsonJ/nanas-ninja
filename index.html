@@ -144,16 +144,6 @@
         <!-- MAIN HOME PAGE -->
         <section id="page-home">
             
-            <div class="card bg-amber-50">
-                <h2 class="text-3xl font-bold mb-4">The Magic Camera</h2>
-                <p class="mb-4">Not sure how to cook it? Show me a photo!</p>
-                <label for="camera-upload" class="btn-massive bg-amber-400 cursor-pointer">
-                    <span class="text-4xl">📸</span> Take a Photo
-                </label>
-                <!-- Forces back camera on mobile devices -->
-                <input type="file" id="camera-upload" accept="image/*" capture="environment" class="hidden" onchange="handleImageUpload(event)">
-            </div>
-
             <div class="card">
                 <h2 class="text-3xl font-bold mb-4">What's for Tea?</h2>
                 <p class="mb-4 text-lg bg-blue-50 p-3 rounded-lg border-2 border-blue-200">
@@ -165,6 +155,16 @@
                 </button>
             </div>
 
+            <div class="card bg-amber-50">
+                <h2 class="text-3xl font-bold mb-4">The Magic Camera</h2>
+                <p class="mb-4">Not sure how to cook it? Show me a photo!</p>
+                <label for="camera-upload" class="btn-massive bg-amber-400 cursor-pointer">
+                    <span class="text-4xl">📸</span> Take a Photo
+                </label>
+                <!-- Forces back camera on mobile devices -->
+                <input type="file" id="camera-upload" accept="image/*" capture="environment" class="hidden" onchange="handleImageUpload(event)">
+            </div>
+
             <!-- Result Section -->
             <div id="result-area" class="card hidden border-green-600 border-4">
                 <div id="loader" class="flex flex-col items-center gap-4 py-4 hidden">
@@ -174,9 +174,23 @@
                 
                 <div id="result-content" class="mb-6"></div>
 
-                <button id="save-btn" onclick="saveToFavourites()" class="btn-massive mt-4 hidden bg-amber-100">
-                    ⭐ Save to Favourites Tin
-                </button>
+                <!-- Follow-up Section -->
+                <div id="follow-up-area" class="hidden border-t-2 border-gray-200 pt-4 mt-4">
+                    <p class="font-bold mb-2">Have a question about this?</p>
+                    <textarea id="follow-up-input" placeholder="e.g. Can I cook it from frozen?" rows="1"></textarea>
+                    <button onclick="askFollowUp()" class="btn-massive mt-3 bg-blue-100">
+                        Ask Nana 💬
+                    </button>
+                </div>
+
+                <div class="flex flex-col gap-3 mt-6">
+                    <button id="save-btn" onclick="saveToFavourites()" class="btn-massive hidden bg-amber-100">
+                        ⭐ Save to Tin
+                    </button>
+                    <button id="reset-btn" onclick="resetApp()" class="btn-massive bg-red-50 text-red-700">
+                        🔄 Start Again
+                    </button>
+                </div>
             </div>
 
             <div class="card">
@@ -266,6 +280,7 @@
         let currentResult = null;
         let isLargeText = false;
         let favourites = JSON.parse(localStorage.getItem('ninja_favourites') || "[]");
+        let chatHistory = [];
 
         const britishClassics = [
             { name: "Perfect Roast Chicken", mode: "Air Fry", temp: "190°C", time: "45-55 mins", instructions: "Season well. Place breast side down first, then flip halfway through." },
@@ -355,84 +370,80 @@
             const loader = document.getElementById('loader');
             const resultArea = document.getElementById('result-area');
             const resultContent = document.getElementById('result-content');
+            const followUpArea = document.getElementById('follow-up-area');
             
             resultArea.classList.remove('hidden');
             loader.classList.remove('hidden');
-            resultContent.innerHTML = "";
             document.getElementById('save-btn').classList.add('hidden');
 
+            // Determine Environment
             const isCanvasPreview = window.location.hostname.includes('goog') || window.location.hostname === '';
             
-            // --- AUTO MODEL HUNTER ---
-            // If the first model fails with "Not found", it instantly tries the next one.
-            const modelsToTry = isCanvasPreview 
-                ? ["gemini-2.5-flash-preview-09-2025", "gemini-1.5-flash"] 
-                : ["gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.5-flash-latest"];
+            // --- THE ABSOLUTE VANILLA V1 FIX ---
+            // Live sites use standard 'v1' with the universally supported 'gemini-1.5-flash'.
+            // Canvas preview uses 'v1beta' with its own model.
+            const apiVersion = isCanvasPreview ? "v1beta" : "v1";
+            const modelName = isCanvasPreview ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
             
-            // SYSTEM INSTRUCTIONS: Safely embedded directly in the prompt
+            const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${apiKey}`;
+            
+            // System Persona: Injected directly to bypass 'systemInstruction' structure errors.
             const systemPrompt = "You are 'Nana', an elderly British lady and Ninja CRISPi cooking assistant. Give instructions in simple UK English with temps in Celsius. Reply strictly with raw JSON containing: foodName, mode, temperature, time, and instructions. For chats, use responseText and instructions.";
             
             let parts = [
-                { text: `[INSTRUCTIONS: ${systemPrompt}]\n\nUser Request: ${prompt}` }
+                { text: `[SYSTEM INSTRUCTIONS: ${systemPrompt}]\n\nUser Request: ${prompt}` }
             ];
 
             if (imageData) {
                 parts.push({ inlineData: { mimeType: "image/jpeg", data: imageData } });
             }
 
-            // Clean Payload: No 'generationConfig' or 'systemInstruction' to avoid structural API crashes
+            // CLEAN PAYLOAD: Absolutely NO generationConfig blocks. 
+            // This prevents the "Unknown name" errors entirely on v1.
             const payload = {
                 contents: [{ parts: parts }]
             };
 
-            let success = false;
-            let lastError = "Unknown error";
-            let data = null;
-
-            // Loop through models until one works
-            for (const model of modelsToTry) {
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-                
-                try {
-                    const response = await fetch(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (response.ok) {
-                        data = await response.json();
-                        success = true;
-                        break; // Stop trying models as soon as one succeeds!
-                    } else {
-                        const errData = await response.json().catch(() => ({}));
-                        lastError = errData.error?.message || `Model ${model} rejected the request.`;
-                        console.warn(`Attempt with ${model} failed. Trying next...`);
-                    }
-                } catch (e) {
-                    lastError = e.message;
-                    console.warn(`Network error with ${model}: ${e.message}`);
-                }
-            }
-
             try {
-                if (!success) {
-                    throw new Error(lastError || "All compatible models failed for this API key.");
+                let response;
+                // Retry logic for unstable network
+                for (let i = 0; i < 3; i++) {
+                    try {
+                        response = await fetch(url, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                        if (response.ok) break;
+                    } catch (e) {}
+                    await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
                 }
 
+                if (!response || !response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    console.error("Gemini API Error Response:", errData);
+                    throw new Error(errData.error?.message || `Status ${response?.status}`);
+                }
+                
+                const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
                 
-                // Extraction regex to gracefully pull the JSON out of any extra chatter
+                // Robust extraction: Pull JSON gracefully from the AI's response text.
                 const jsonMatch = text.match(/\{[\s\S]*\}/);
-                if (jsonMatch) text = jsonMatch[0];
+                if (jsonMatch) {
+                    text = jsonMatch[0];
+                } else {
+                    throw new Error("Could not understand the AI's formatting.");
+                }
                 
                 const result = JSON.parse(text);
                 displayResult(result);
+                if (followUpArea) followUpArea.classList.remove('hidden');
                 return result;
 
             } catch (err) {
+                console.error("Connection Error:", err);
                 resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. (Error: ${err.message}). Please check the setup link.</p>`;
-                console.error(err);
             } finally {
                 loader.classList.add('hidden');
             }
@@ -446,7 +457,7 @@
                 resultContent.innerHTML = `
                     <h3 class="text-3xl font-bold mb-2">${result.foodName}</h3>
                     <div class="bg-amber-100 p-4 rounded-xl border-2 border-black mb-4">
-                        <p><strong>Ninja Setting:</strong> ${result.mode}</p>
+                        <p><strong>Ninja CRISPi Setting:</strong> ${result.mode}</p>
                         <p><strong>Temperature:</strong> ${result.temperature}°Celsius</p>
                         <p><strong>Time:</strong> ${result.time}</p>
                     </div>
@@ -467,6 +478,14 @@
             resultContent.scrollIntoView({ behavior: 'smooth' });
         }
 
+        async function askFollowUp() {
+            const input = document.getElementById('follow-up-input');
+            const question = input ? input.value.trim() : "";
+            if (!question) return;
+            input.value = "";
+            await callGemini(`Nana asks: ${question}`);
+        }
+
         async function handleImageUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -474,7 +493,8 @@
             const reader = new FileReader();
             reader.onload = async (e) => {
                 const base64 = e.target.result.split(',')[1];
-                const prompt = "Identify this food and give Ninja CRISPi settings (Mode, Temp in C, Time). Use simple British English.";
+                const prompt = "Identify this food in the photo and give Ninja CRISPi settings (Mode, Temp in C, Time).";
+                resetApp(false);
                 await callGemini(prompt, base64);
             };
             reader.readAsDataURL(file);
@@ -487,7 +507,27 @@
                 return;
             }
             const prompt = `I have these ingredients: ${input}. Suggest a simple British meal I can cook in my Ninja CRISPi.`;
+            resetApp(false);
             await callGemini(prompt);
+        }
+
+        function resetApp(hideArea = true) {
+            chatHistory = []; 
+            currentResult = null;
+            const ingredientInput = document.getElementById('ingredient-input');
+            const followUpInput = document.getElementById('follow-up-input');
+            const resultContent = document.getElementById('result-content');
+            const followUpArea = document.getElementById('follow-up-area');
+            
+            if (ingredientInput) ingredientInput.value = "";
+            if (followUpInput) followUpInput.value = "";
+            if (resultContent) resultContent.innerHTML = "";
+            if (followUpArea) followUpArea.classList.add('hidden');
+            if (hideArea) {
+                const resultArea = document.getElementById('result-area');
+                if (resultArea) resultArea.classList.add('hidden');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
         }
 
         function saveToFavourites() {
