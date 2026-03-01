@@ -356,11 +356,11 @@
             resultContent.innerHTML = "";
             document.getElementById('save-btn').classList.add('hidden');
 
-            // --- THE VANILLA V1 ENDPOINT ---
-            // Hard-locked to v1. No beta fields. No auto-hunting. 
-            const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+            // --- THE FINAL FALLBACK ---
+            // Use the gemini-1.5-flash-8b model. This is a highly accessible model on the standard v1 endpoint.
+            // If this fails, the API key itself is truly the issue.
+            const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-8b:generateContent?key=${apiKey}`;
             
-            // Simple prompt injection. We bypass 'systemInstruction' completely.
             const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temps in Celsius. Return ONLY a raw JSON object with keys: foodName, mode, temperature, time, and instructions. Do not use markdown blocks, just return the raw curly braces and JSON.";
             
             let finalPrompt = `[SYSTEM INSTRUCTIONS: ${systemPrompt}]\n\nUser Request: ${prompt}`;
@@ -379,11 +379,10 @@
 
             try {
                 let response;
-                // Retry loop for spotty connections
+                // Simple retry loop
                 for (let i = 0; i < 3; i++) {
                     try {
-                        // VERY IMPORTANT: We only send 'contents'. 
-                        // No 'generationConfig' or 'systemInstruction' to trigger API crash errors.
+                        // VERY IMPORTANT: Clean payload.
                         response = await fetch(url, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -403,8 +402,7 @@
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
                 
-                // Robust Regex: Since we can't force the API to return JSON structurally, 
-                // we use a regex to pluck the JSON out of any conversational text it gives back.
+                // Robust Regex: Pluck the JSON out of any conversational text it gives back.
                 const jsonMatch = text.match(/\{[\s\S]*\}/);
                 if (jsonMatch) {
                     text = jsonMatch[0];
@@ -417,7 +415,7 @@
                 return result;
 
             } catch (err) {
-                resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. (Error: ${err.message}). Please check the setup link or your internet.</p>`;
+                resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. (Error: ${err.message}). If this keeps happening, you'll need to generate a fresh API key!</p>`;
                 console.error(err);
             } finally {
                 loader.classList.add('hidden');
