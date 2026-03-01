@@ -163,6 +163,7 @@
                 <label for="camera-upload" class="btn-massive bg-amber-400 cursor-pointer">
                     <span class="text-4xl">📸</span> Take a Photo
                 </label>
+                <!-- Forces back camera on mobile devices -->
                 <input type="file" id="camera-upload" accept="image/*" capture="environment" class="hidden" onchange="handleImageUpload(event)">
             </div>
 
@@ -272,10 +273,9 @@
     </nav>
 
     <script>
-        // Define these at the very start to ensure handleSecretTap works correctly
+        // Global variables defined at window level to prevent ReferenceErrors
         window.tapCount = 0;
         window.tapTimer = null;
-
         let isLargeText = false;
         let favourites = JSON.parse(localStorage.getItem('ninja_favourites') || "[]");
         let chatHistory = []; 
@@ -393,19 +393,20 @@
             const saveBtn = document.getElementById('save-btn');
             if (saveBtn) saveBtn.classList.add('hidden');
 
-            // --- UNIVERSAL FIX ---
-            // Use v1beta for both environments. It handles camelCase naming better for structured responses.
-            const apiVersion = "v1beta"; 
-            const modelName = (isCanvasPreview && !hasSavedKey) ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
+            // --- UNIVERSAL STABILITY LOGIC ---
+            // If we have a personal key (Live Site), use the v1 endpoint with snake_case naming.
+            // If we are in Canvas (Preview), use the v1beta endpoint with camelCase naming.
+            const isPlatformPreview = isCanvasPreview && !hasSavedKey;
+            const apiVersion = isPlatformPreview ? "v1beta" : "v1";
+            const modelName = isPlatformPreview ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
             
             const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${currentKey}`;
             
-            // Conversation Injection: Bypass the buggy 'systemInstruction' field entirely.
-            // This works on every version of Gemini and stops "Unknown name" errors on mobile.
+            // Conversation Injection: Bypass 'systemInstruction' crash by putting persona in the history.
             if (chatHistory.length === 0) {
-                const nanaRules = "You are 'Nana', an elderly British lady and Ninja CRISPi assistant. Give instructions in simple British English with temps in Celsius. Return ONLY a raw JSON object containing: foodName, mode, temperature, time, and instructions. For chats, use responseText and instructions.";
-                chatHistory.push({ role: "user", parts: [{ text: "SYSTEM RULES: " + nanaRules }] });
-                chatHistory.push({ role: "model", parts: [{ text: "Understood. I will strictly act as Nana's assistant and reply in JSON format." }] });
+                const instructions = "You are 'Nana', an elderly British lady and Ninja CRISPi assistant. Reply ONLY with raw JSON containing: foodName, mode, temperature, time, and instructions. For chat, use responseText and instructions.";
+                chatHistory.push({ role: "user", parts: [{ text: "SYSTEM INSTRUCTIONS: " + instructions }] });
+                chatHistory.push({ role: "model", parts: [{ text: "Understood. Nana is ready." }] });
             }
 
             let userParts = [{ text: newPrompt }];
@@ -416,13 +417,16 @@
             chatHistory.push({ role: "user", parts: userParts });
 
             try {
-                // Simplified payload with standard camelCase keys for v1beta
-                let payload = {
-                    contents: chatHistory,
-                    generationConfig: { 
-                        responseMimeType: "application/json" 
-                    }
-                };
+                // Construct payload based on API version detected
+                let payload = { contents: chatHistory };
+                
+                if (apiVersion === "v1beta") {
+                    // camelCase for Preview
+                    payload.generationConfig = { responseMimeType: "application/json" };
+                } else {
+                    // snake_case for Mobile/Live
+                    payload.generation_config = { response_mime_type: "application/json" };
+                }
 
                 let response;
                 // Exponential backoff retry logic
@@ -447,7 +451,7 @@
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
-                // Sanitize JSON response strings (remove any markdown markers)
+                // Extraction regex to pull JSON out of any surrounding chat text
                 const jsonMatch = text.match(/\{[\s\S]*\}/);
                 if (jsonMatch) text = jsonMatch[0];
                 
