@@ -285,9 +285,9 @@
         let currentResult = null;
         let isLargeText = false;
         let favourites = JSON.parse(localStorage.getItem('ninja_favourites') || "[]");
+        let chatHistory = []; 
         let tapCount = 0;
         let tapTimer = null;
-        let chatHistory = []; 
 
         const britishClassics = [
             { name: "Perfect Roast Chicken", mode: "Air Fry", temp: "190°C", time: "45-55 mins", instructions: "Season well. Place breast side down first, then flip halfway through." },
@@ -394,19 +394,25 @@
             const saveBtn = document.getElementById('save-btn');
             if (saveBtn) saveBtn.classList.add('hidden');
 
-            // --- CRITICAL FIX ---
-            // We unify everything to v1beta because it is the only version that 
-            // reliably supports structured JSON output and systemInstructions 
-            // across all device types.
+            // --- UNIVERSAL CONNECTION LOGIC ---
             const apiVersion = "v1beta"; 
-            
-            // Model Logic:
-            // Preview Environment (No Key) -> Uses the specific preview model.
-            // Nana's Phone (Saved Key) -> Uses stable gemini-1.5-flash.
             const modelName = (isCanvasPreview && !hasSavedKey) ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
             
             const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${currentKey}`;
             
+            const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temperatures in Celsius. For recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up, return a JSON object with keys: responseText and instructions. Only return raw JSON.";
+
+            if (chatHistory.length === 0) {
+                chatHistory.push({
+                    role: "user",
+                    parts: [{ text: "SYSTEM INSTRUCTIONS: " + systemPrompt }]
+                });
+                chatHistory.push({
+                    role: "model",
+                    parts: [{ text: "Understood. I am Nana's Ninja assistant and will only reply in the requested JSON format." }]
+                });
+            }
+
             let userParts = [{ text: newPrompt }];
             if (imageData) {
                 userParts.push({ inlineData: { mimeType: "image/jpeg", data: imageData } });
@@ -414,20 +420,15 @@
             
             chatHistory.push({ role: "user", parts: userParts });
 
-            const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temperatures in Celsius. For initial recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up questions, return a JSON object with keys: responseText and instructions (optional). Always return raw JSON.";
-
             try {
-                // v1beta JSON keys MUST be camelCase (e.g. systemInstruction, responseMimeType)
                 let payload = {
                     contents: chatHistory,
-                    systemInstruction: { parts: [{ text: systemPrompt }] },
                     generationConfig: { 
                         responseMimeType: "application/json" 
                     }
                 };
 
                 let response;
-                // Exponential backoff retry logic
                 for (let i = 0; i < 5; i++) {
                     try {
                         response = await fetch(url, {
@@ -449,7 +450,6 @@
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
-                // Sanitize JSON response strings
                 text = text.replace(/```json/g, '').replace(/```/g, '').trim();
                 const result = JSON.parse(text);
                 
@@ -534,7 +534,7 @@
         }
 
         function resetApp(hideArea = true) {
-            chatHistory = []; // Completely clear history for a clean reset
+            chatHistory = []; 
             currentResult = null;
             const ingredientInput = document.getElementById('ingredient-input');
             const followUpInput = document.getElementById('follow-up-input');
