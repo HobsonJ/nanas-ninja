@@ -133,7 +133,6 @@
             <button onclick="toggleTextSize()" class="btn-massive flex-1" style="padding: 12px; font-size: 20px;">
                 Aa Text Size
             </button>
-            <!-- Settings button hidden by default -->
             <button id="settings-cog" onclick="showPage('settings')" class="btn-massive w-16 hidden" style="padding: 12px; width: 80px;">
                 ⚙️
             </button>
@@ -164,7 +163,6 @@
                 <label for="camera-upload" class="btn-massive bg-amber-400 cursor-pointer">
                     <span class="text-4xl">📸</span> Take a Photo
                 </label>
-                <!-- Added capture="environment" to force the back camera on mobile devices -->
                 <input type="file" id="camera-upload" accept="image/*" capture="environment" class="hidden" onchange="handleImageUpload(event)">
             </div>
 
@@ -274,7 +272,6 @@
     </nav>
 
     <script>
-        // Use a function to get the current key fresh from memory or environment
         function getApiKey() {
             return localStorage.getItem('ninja_api_key') || "";
         }
@@ -300,10 +297,8 @@
             
             if (setupKey) {
                 localStorage.setItem('ninja_api_key', setupKey.trim());
-                // Clean the URL
                 window.history.replaceState({}, document.title, window.location.pathname);
                 showMessage("Nana's Ninja is Ready! 🪄");
-                // Refresh the settings input if Nana is looking at it
                 const keyInput = document.getElementById('api-key-input');
                 if (keyInput) keyInput.value = setupKey.trim();
             }
@@ -345,7 +340,6 @@
             const val = document.getElementById('api-key-input').value.trim();
             localStorage.setItem('ninja_api_key', val);
             showMessage("Key Saved! ✅");
-            // Show Home page again
             setTimeout(() => {
                 showPage('home');
                 const cog = document.getElementById('settings-cog');
@@ -377,9 +371,13 @@
 
         async function callGemini(newPrompt, imageData = null) {
             const currentKey = getApiKey();
-            // In the Canvas preview environment, hostname includes "goog".
-            // If we are NOT in the preview and there is no key, we can't make the call.
-            if (!currentKey && !window.location.hostname.includes('goog')) {
+            const isCanvasPreview = window.location.hostname.includes('goog') || window.location.hostname === '';
+            
+            // In Canvas preview, the environment provides the key if apiKey is empty.
+            // On GitHub, the key MUST be provided.
+            const activeKey = (isCanvasPreview && !currentKey) ? "" : currentKey;
+
+            if (!activeKey && !isCanvasPreview) {
                 showMessage("I need setting up! Tap my face 5 times.");
                 return;
             }
@@ -389,12 +387,14 @@
             const resultContent = document.getElementById('result-content');
             const followUpArea = document.getElementById('follow-up-area');
             
-            resultArea.classList.remove('hidden');
-            loader.classList.remove('hidden');
-            document.getElementById('save-btn').classList.add('hidden');
+            if (resultArea) resultArea.classList.remove('hidden');
+            if (loader) loader.classList.remove('hidden');
+            const saveBtn = document.getElementById('save-btn');
+            if (saveBtn) saveBtn.classList.add('hidden');
 
+            // Correct model for this environment.
             const modelName = "gemini-2.5-flash-preview-09-2025";
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${currentKey}`;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${activeKey}`;
             
             let userParts = [{ text: newPrompt }];
             if (imageData) {
@@ -407,7 +407,6 @@
 
             try {
                 let response;
-                // Exponential backoff retry logic
                 for (let i = 0; i < 5; i++) {
                     try {
                         response = await fetch(url, {
@@ -427,13 +426,12 @@
                 if (!response || !response.ok) {
                     const errData = await response.json().catch(() => ({}));
                     console.error("Gemini API Error Response:", errData);
-                    throw new Error(errData.error?.message || "API failed");
+                    throw new Error(errData.error?.message || `API failed with status ${response?.status}`);
                 }
                 
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
-                // Sanitize JSON response strings
                 text = text.replace(/```json/g, '').replace(/```/g, '').trim();
                 const result = JSON.parse(text);
                 
@@ -445,7 +443,9 @@
 
             } catch (err) {
                 console.error("Final Connection Error:", err);
-                resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. Please check your internet or use the setup link again.</p>`;
+                if (resultContent) {
+                    resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. Error: ${err.message}. Please check your internet or the API key link I sent you.</p>`;
+                }
             } finally {
                 if (loader) loader.classList.add('hidden');
             }
@@ -467,7 +467,8 @@
                     <p class="mb-2"><strong>Nana's Recipe:</strong></p>
                     <p>${result.instructions}</p>
                 `;
-                document.getElementById('save-btn').classList.remove('hidden');
+                const saveBtn = document.getElementById('save-btn');
+                if (saveBtn) saveBtn.classList.remove('hidden');
             } else {
                 const followUpHtml = `
                     <div class="bg-blue-50 p-4 rounded-xl border-2 border-blue-300 mb-4 mt-4">
@@ -479,7 +480,8 @@
                 resultContent.innerHTML += followUpHtml;
             }
             
-            document.getElementById('result-area').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            const resArea = document.getElementById('result-area');
+            if (resArea) resArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
         async function askFollowUp() {
