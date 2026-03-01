@@ -70,7 +70,7 @@
             background-color: #eee;
         }
 
-        input, textarea {
+        input, textarea, select {
             border: 3px solid var(--dark);
             border-radius: 12px;
             padding: 16px;
@@ -102,7 +102,7 @@
             100% { transform: rotate(360deg); }
         }
 
-        .hidden { display: none; }
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
@@ -230,14 +230,25 @@
             <p class="mt-4 italic text-lg text-center">Note: Always check that meat is piping hot!</p>
         </section>
 
-        <!-- SETTINGS PAGE -->
+        <!-- SETTINGS PAGE (Model Scanner Added) -->
         <section id="page-settings" class="hidden">
             <h2 class="text-4xl font-black mb-6">App Settings</h2>
             <div class="card">
-                <p class="mb-4">This key lets the camera work. You only need to save it once.</p>
+                <p class="mb-2 font-bold">1. Your API Key:</p>
                 <input type="password" id="api-key-input" placeholder="Paste Key Here...">
+                
+                <p class="mb-2 mt-6 font-bold">2. Find Available Models:</p>
+                <p class="mb-4 text-sm">If you're getting connection errors, tap below to see what your key is allowed to use.</p>
+                <button onclick="fetchModels()" class="btn-massive bg-amber-100 mb-4" style="padding: 12px; font-size: 18px;">
+                    🔍 Search Models
+                </button>
+                
+                <select id="model-select" class="hidden mb-4" style="font-size: 18px;">
+                </select>
+                <p id="model-status" class="text-sm italic font-bold text-red-600 mb-4"></p>
+
                 <button onclick="saveApiKey()" class="btn-massive mt-4 bg-blue-100">
-                    Save Key
+                    Save Settings
                 </button>
                 <button onclick="showPage('home')" class="btn-massive mt-4">
                     Go Back
@@ -310,18 +321,81 @@
             window.scrollTo(0,0);
         }
 
+        // --- MODEL SCANNER FUNCTION ---
+        async function fetchModels() {
+            const key = document.getElementById('api-key-input').value.trim();
+            const statusEl = document.getElementById('model-status');
+            const selectEl = document.getElementById('model-select');
+            
+            if (!key) {
+                statusEl.innerText = "Please paste an API key first.";
+                return;
+            }
+            
+            statusEl.innerText = "Scanning Google for available models...";
+            statusEl.className = "text-sm italic font-bold text-blue-600 mb-4";
+            selectEl.classList.add('hidden');
+
+            try {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+                
+                if (!res.ok) {
+                    throw new Error("Google rejected the key. Check your AI Studio billing settings.");
+                }
+                
+                const data = await res.json();
+                const validModels = data.models.filter(m => 
+                    m.supportedGenerationMethods && 
+                    m.supportedGenerationMethods.includes('generateContent') &&
+                    m.name.includes('gemini')
+                );
+
+                if (validModels.length === 0) {
+                    throw new Error("Key is valid, but zero models are unlocked for it.");
+                }
+
+                selectEl.innerHTML = '';
+                validModels.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.name; // e.g. models/gemini-1.5-flash
+                    opt.textContent = m.displayName || m.name;
+                    selectEl.appendChild(opt);
+                });
+
+                selectEl.classList.remove('hidden');
+                statusEl.innerText = `Success! Found ${validModels.length} models. Pick one and Save.`;
+                statusEl.className = "text-sm italic font-bold text-green-600 mb-4";
+
+                // Auto-select previously saved if it exists
+                const savedModel = localStorage.getItem('ninja_model');
+                if (savedModel && Array.from(selectEl.options).some(o => o.value === savedModel)) {
+                    selectEl.value = savedModel;
+                }
+
+            } catch (err) {
+                statusEl.innerText = "Error: " + err.message;
+                statusEl.className = "text-sm italic font-bold text-red-600 mb-4";
+            }
+        }
+
         function saveApiKey() {
             const val = document.getElementById('api-key-input').value.trim();
             localStorage.setItem('ninja_api_key', val);
             apiKey = val;
-            showMessage("Key Saved! ✅");
+            
+            const modelSelect = document.getElementById('model-select');
+            if (!modelSelect.classList.contains('hidden') && modelSelect.value) {
+                localStorage.setItem('ninja_model', modelSelect.value);
+            }
+
+            showMessage("Settings Saved! ✅");
             showPage('home');
         }
 
         function toggleTextSize() {
             isLargeText = !isLargeText;
             document.body.classList.toggle('extra-large-text', isLargeText);
-            const inputs = document.querySelectorAll('input, textarea, .btn-massive, .nav-item');
+            const inputs = document.querySelectorAll('input, textarea, select, .btn-massive, .nav-item');
             inputs.forEach(el => el.classList.toggle('extra-large-text', isLargeText));
         }
 
@@ -354,14 +428,17 @@
             resultArea.classList.remove('hidden');
             loader.classList.remove('hidden');
             resultContent.innerHTML = "";
-            const saveBtn = document.getElementById('save-btn');
-            if (saveBtn) saveBtn.classList.add('hidden');
+            document.getElementById('save-btn').classList.add('hidden');
 
             const isCanvasPreview = window.location.hostname.includes('goog') || window.location.hostname === '';
             
-            // We use v1beta as the baseline because it allows the model-discovery request.
-            let targetModel = isCanvasPreview ? "models/gemini-2.5-flash-preview-09-2025" : "models/gemini-1.5-flash";
-            let url = `https://generativelanguage.googleapis.com/v1beta/${targetModel}:generateContent?key=${apiKey}`;
+            // Grab the user's specifically scanned and saved model, otherwise fallback to defaults
+            let targetModel = localStorage.getItem('ninja_model');
+            if (!targetModel) {
+                targetModel = isCanvasPreview ? "models/gemini-2.5-flash-preview-09-2025" : "models/gemini-1.5-flash";
+            }
+            
+            const url = `https://generativelanguage.googleapis.com/v1beta/${targetModel}:generateContent?key=${apiKey}`;
             
             // Inject Persona Directly
             const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temps in Celsius. Return ONLY a raw JSON object with keys: foodName, mode, temperature, time, and instructions. Do not use markdown formatting like ```json.";
@@ -380,40 +457,20 @@
             }
 
             try {
+                // Safest possible payload structure
                 let payload = JSON.stringify({ contents: contents });
-                let response = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: payload
-                });
-
-                // --- AUTO-DISCOVERY FALLBACK ---
-                // If the key rejects the model, we actively ask Google AI what models your specific key CAN use!
-                if (response.status === 404 || response.status === 400) {
-                    console.log("Model blocked. Asking Google for permitted models...");
-                    const modelsResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-                    
-                    if (modelsResponse.ok) {
-                        const modelsData = await modelsResponse.json();
-                        // Find models that support generateContent
-                        const validModels = modelsData.models.filter(m => 
-                            m.supportedGenerationMethods && 
-                            m.supportedGenerationMethods.includes('generateContent') &&
-                            m.name.includes('gemini')
-                        );
-                        
-                        if (validModels.length > 0) {
-                            const fallbackModel = validModels[0].name; // Grabs the first permitted model
-                            console.log("Found permitted model:", fallbackModel);
-                            
-                            url = `https://generativelanguage.googleapis.com/v1beta/${fallbackModel}:generateContent?key=${apiKey}`;
-                            response = await fetch(url, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: payload
-                            });
-                        }
-                    }
+                let response;
+                
+                for (let i = 0; i < 3; i++) {
+                    try {
+                        response = await fetch(url, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: payload
+                        });
+                        if (response.ok) break;
+                    } catch (e) {}
+                    await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
                 }
 
                 if (!response || !response.ok) {
@@ -440,13 +497,12 @@
                 return result;
 
             } catch (err) {
-                // If this fails, the API key truly has zero active generation permissions.
                 resultContent.innerHTML = `
                     <div class="bg-red-50 p-4 border-2 border-red-300 rounded-xl mb-4 text-dark">
-                        <p class="text-xl font-bold mb-2 text-red-700">Nana, the connection failed.</p>
+                        <p class="text-xl font-bold mb-2 text-red-700">Connection failed.</p>
                         <p class="mb-2 text-sm italic">${err.message}</p>
                         <p class="text-sm font-bold mt-2 border-t pt-2 border-red-200">
-                            Your API Key seems completely restricted. Check Google AI Studio to ensure your account has access to these models (a linked billing account may now be required in the UK).
+                            Please go to Settings, tap "Search Models", select an available model from the list, and Save.
                         </p>
                     </div>
                 `;
