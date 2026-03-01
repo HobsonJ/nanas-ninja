@@ -133,6 +133,7 @@
             <button onclick="toggleTextSize()" class="btn-massive flex-1" style="padding: 12px; font-size: 20px;">
                 Aa Text Size
             </button>
+            <!-- Settings button hidden by default -->
             <button id="settings-cog" onclick="showPage('settings')" class="btn-massive w-16 hidden" style="padding: 12px; width: 80px;">
                 ⚙️
             </button>
@@ -163,6 +164,7 @@
                 <label for="camera-upload" class="btn-massive bg-amber-400 cursor-pointer">
                     <span class="text-4xl">📸</span> Take a Photo
                 </label>
+                <!-- Added capture="environment" to force the back camera on mobile devices -->
                 <input type="file" id="camera-upload" accept="image/*" capture="environment" class="hidden" onchange="handleImageUpload(event)">
             </div>
 
@@ -272,6 +274,7 @@
     </nav>
 
     <script>
+        // Note: apiKey is provided by environment when empty
         let apiKey = localStorage.getItem('ninja_api_key') || "";
         let currentResult = null;
         let isLargeText = false;
@@ -306,10 +309,12 @@
             }
         };
 
+        // Secret: Tap Nana's face 5 times to show settings
         function handleSecretTap() {
             tapCount++;
             clearTimeout(tapTimer);
             tapTimer = setTimeout(() => { tapCount = 0; }, 1000);
+
             if (tapCount >= 5) {
                 const cog = document.getElementById('settings-cog');
                 cog.classList.toggle('hidden');
@@ -358,11 +363,6 @@
         }
 
         async function callGemini(newPrompt, imageData = null) {
-            if (!apiKey) {
-                showMessage("I need setting up! Tap my face 5 times.");
-                return;
-            }
-
             const loader = document.getElementById('loader');
             const resultArea = document.getElementById('result-area');
             const resultContent = document.getElementById('result-content');
@@ -372,8 +372,8 @@
             loader.classList.remove('hidden');
             document.getElementById('save-btn').classList.add('hidden');
 
-            // Using gemini-1.5-flash for maximum stability and to avoid 404 errors
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+            // Use the specific model supported in the Canvas environment
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
             
             let userParts = [{ text: newPrompt }];
             if (imageData) {
