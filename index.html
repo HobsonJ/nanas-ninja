@@ -163,6 +163,7 @@
                 <label for="camera-upload" class="btn-massive bg-amber-400 cursor-pointer">
                     <span class="text-4xl">📸</span> Take a Photo
                 </label>
+                <!-- Forces back camera on mobile devices -->
                 <input type="file" id="camera-upload" accept="image/*" capture="environment" class="hidden" onchange="handleImageUpload(event)">
             </div>
 
@@ -272,13 +273,13 @@
     </nav>
 
     <script>
-        // Use an empty string for platform injection check
+        // Platform auto-injection variable
         const apiKeyEnv = "";
 
         function getEffectiveKey() {
             const saved = localStorage.getItem('ninja_api_key');
-            if (saved && saved.trim().length > 10) return saved.trim();
-            return apiKeyEnv;
+            if (saved && saved.trim() !== "") return saved.trim();
+            return apiKeyEnv; 
         }
 
         let currentResult = null;
@@ -300,10 +301,12 @@
             const setupKey = urlParams.get('setup');
             
             if (setupKey) {
-                localStorage.setItem('ninja_api_key', setupKey.trim());
+                const cleanKey = setupKey.trim();
+                localStorage.setItem('ninja_api_key', cleanKey);
                 window.history.replaceState({}, document.title, window.location.pathname);
                 showMessage("Nana's Ninja is Ready! 🪄");
-                setTimeout(() => location.reload(), 1000);
+                const keyInput = document.getElementById('api-key-input');
+                if (keyInput) keyInput.value = cleanKey;
             }
 
             loadRecipeOfDay();
@@ -391,9 +394,15 @@
             const saveBtn = document.getElementById('save-btn');
             if (saveBtn) saveBtn.classList.add('hidden');
 
-            // CRITICAL FIX: Always use v1beta to ensure systemInstruction and responseMimeType support.
-            // Model mapping: Preview environment uses preview model, Live site uses stable flash.
+            // --- CRITICAL FIX ---
+            // We unify everything to v1beta because it is the only version that 
+            // reliably supports structured JSON output and systemInstructions 
+            // across all device types.
             const apiVersion = "v1beta"; 
+            
+            // Model Logic:
+            // Preview Environment (No Key) -> Uses the specific preview model.
+            // Nana's Phone (Saved Key) -> Uses stable gemini-1.5-flash.
             const modelName = (isCanvasPreview && !hasSavedKey) ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
             
             const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${currentKey}`;
@@ -408,7 +417,7 @@
             const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temperatures in Celsius. For initial recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up questions, return a JSON object with keys: responseText and instructions (optional). Always return raw JSON.";
 
             try {
-                // v1beta JSON keys MUST be camelCase
+                // v1beta JSON keys MUST be camelCase (e.g. systemInstruction, responseMimeType)
                 let payload = {
                     contents: chatHistory,
                     systemInstruction: { parts: [{ text: systemPrompt }] },
@@ -440,7 +449,7 @@
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
-                // Sanitize JSON
+                // Sanitize JSON response strings
                 text = text.replace(/```json/g, '').replace(/```/g, '').trim();
                 const result = JSON.parse(text);
                 
@@ -525,7 +534,7 @@
         }
 
         function resetApp(hideArea = true) {
-            chatHistory = []; // Correctly clear memory for the "Start Again" button
+            chatHistory = []; // Completely clear history for a clean reset
             currentResult = null;
             const ingredientInput = document.getElementById('ingredient-input');
             const followUpInput = document.getElementById('follow-up-input');
