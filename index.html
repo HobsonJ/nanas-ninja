@@ -357,7 +357,7 @@
                 selectEl.innerHTML = '';
                 validModels.forEach(m => {
                     const opt = document.createElement('option');
-                    opt.value = m.name; // e.g. models/gemini-1.5-flash
+                    opt.value = m.name; // e.g. models/gemini-2.5-flash
                     opt.textContent = m.displayName || m.name;
                     selectEl.appendChild(opt);
                 });
@@ -432,10 +432,11 @@
 
             const isCanvasPreview = window.location.hostname.includes('goog') || window.location.hostname === '';
             
-            // Grab the user's specifically scanned and saved model, otherwise fallback to defaults
+            // --- THE 2.5 FLASH UPDATE ---
+            // Grab the exact model selected from the dropdown, OR default to the confirmed working 2.5 Flash model!
             let targetModel = localStorage.getItem('ninja_model');
             if (!targetModel) {
-                targetModel = isCanvasPreview ? "models/gemini-2.5-flash-preview-09-2025" : "models/gemini-1.5-flash";
+                targetModel = isCanvasPreview ? "models/gemini-2.5-flash-preview-09-2025" : "models/gemini-2.5-flash";
             }
             
             const url = `https://generativelanguage.googleapis.com/v1beta/${targetModel}:generateContent?key=${apiKey}`;
@@ -457,7 +458,7 @@
             }
 
             try {
-                // Safest possible payload structure
+                // Safest possible payload structure, no config blocks to cause formatting crashes
                 let payload = JSON.stringify({ contents: contents });
                 let response;
                 
