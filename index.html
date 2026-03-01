@@ -273,7 +273,7 @@
     </nav>
 
     <script>
-        // CRITICAL: Global variables at top level to fix ReferenceErrors
+        // GLOBAL SCOPE DEFINITIONS
         window.tapCount = 0;
         window.tapTimer = null;
         let isLargeText = false;
@@ -281,7 +281,7 @@
         let chatHistory = []; 
         let currentResult = null;
 
-        // Use an empty string for platform injection check
+        // Platform auto-injection variable
         const apiKeyEnv = "";
 
         function getEffectiveKey() {
@@ -395,11 +395,9 @@
             const saveBtn = document.getElementById('save-btn');
             if (saveBtn) saveBtn.classList.add('hidden');
 
-            // --- UNIVERSAL FIX ---
+            // --- CRITICAL STABILITY FIX ---
             // Locked to v1beta for both environments to ensure camelCase naming and structured JSON works correctly.
-            // Model Logic: 
-            // 1. If in Preview environment without a personal key -> gemini-2.5-flash-preview-09-2025
-            // 2. All other cases (Nana's phone with saved key) -> gemini-1.5-flash
+            // Model mapping ensures standard keys use stable flash.
             const apiVersion = "v1beta"; 
             const modelName = (isCanvasPreview && !hasSavedKey) ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
             
@@ -407,8 +405,8 @@
             
             const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temperatures in Celsius. For recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up, return a JSON object with keys: responseText and instructions. Only return raw JSON.";
 
-            // Conversation Injection: Bypass 'systemInstruction' Crash on Mobile
-            // We put the rules directly into history. This is 100% stable on all Gemini versions.
+            // Conversation Injection Fix: Bypass "systemInstruction" Crash on Mobile
+            // We put the rules directly into history. This is 100% stable on all Gemini versions and tiers.
             if (chatHistory.length === 0) {
                 chatHistory.push({
                     role: "user",
