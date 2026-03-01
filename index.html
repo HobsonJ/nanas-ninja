@@ -394,18 +394,19 @@
             const saveBtn = document.getElementById('save-btn');
             if (saveBtn) saveBtn.classList.add('hidden');
 
-            // --- THE STABILITY FIX ---
-            // GitHub site (Live) uses stable 'v1'. Preview environment uses 'v1beta'.
-            const isGitHubSite = !isCanvasPreview || hasSavedKey;
-            const apiVersion = isGitHubSite ? "v1" : "v1beta";
-            const modelName = isGitHubSite ? "gemini-1.5-flash" : "gemini-2.5-flash-preview-09-2025";
+            const isPlatformPreview = isCanvasPreview && !hasSavedKey;
+            const apiVersion = "v1beta"; 
             
-            const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${currentKey}`;
+            // --- THE MODEL HUNTER FIX ---
+            // Because some free-tier API keys reject 'gemini-1.5-flash', we create a list of fallback models.
+            // If the first one gets a 'Not Found' error, the script instantly tries the next one.
+            const fallbackModels = isPlatformPreview 
+                ? ["gemini-2.5-flash-preview-09-2025"]
+                : ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-1.5-flash-8b", "gemini-1.5-pro", "gemini-pro"];
             
-            // SYSTEM PERSONA - STRICTLY NINJA CRISPI ONLY
+            // Universal Persona (No location tracking, just Ninja CRISPi focus)
             const systemPrompt = "You are 'Nana', a friendly elderly British lady and expert on the Ninja CRISPi cooker. Give instructions in simple British English with temps in Celsius. Reply strictly with raw JSON data containing: foodName, mode, temperature, time, and instructions. For chats, use responseText and instructions. Only return JSON.";
 
-            // Universal History Method: Bypasses field errors on v1 by putting persona in history.
             if (chatHistory.length === 0) {
                 chatHistory.push({
                     role: "user",
@@ -425,37 +426,56 @@
             chatHistory.push({ role: "user", parts: userParts });
 
             try {
+                // UNIVERSAL PAYLOAD: 
+                // We completely omit 'generation_config' to prevent the "Unknown name response_mime_type" crash.
                 let payload = { contents: chatHistory };
                 
-                // CRITICAL: We DO NOT send generation_config or response_mime_type to v1 (stable).
-                // This prevents the "Unknown name" error in the browser.
-                if (apiVersion === "v1beta") {
-                    payload.generationConfig = { responseMimeType: "application/json" };
+                let success = false;
+                let lastError = "Unknown error";
+                let text = "";
+
+                // Begin trying models from the list until one accepts the API key
+                for (const model of fallbackModels) {
+                    const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent?key=${currentKey}`;
+                    
+                    for (let retry = 0; retry < 2; retry++) {
+                        try {
+                            const response = await fetch(url, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(payload)
+                            });
+                            
+                            if (response.ok) {
+                                const data = await response.json();
+                                text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                                if (text) {
+                                    success = true;
+                                    break; // Exit retry loop on success
+                                }
+                            } else {
+                                const errData = await response.json().catch(() => ({}));
+                                lastError = errData.error?.message || `Status ${response.status} for model ${model}`;
+                                
+                                // If the API key explicitly says "Model Not Found", skip to the next model immediately
+                                if (response.status === 404 || response.status === 400) {
+                                    break; 
+                                }
+                            }
+                        } catch (e) {
+                            lastError = e.message;
+                        }
+                        if (!success) await new Promise(r => setTimeout(r, 800)); // Short delay before retry
+                    }
+                    if (success) break; // Exit model hunting loop if a model worked
                 }
 
-                let response;
-                for (let i = 0; i < 5; i++) {
-                    try {
-                        response = await fetch(url, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(payload)
-                        });
-                        if (response.ok) break;
-                    } catch (e) {}
-                    await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
-                }
-
-                if (!response || !response.ok) {
-                    const errData = await response.json().catch(() => ({}));
-                    console.error("Gemini Error:", errData);
-                    throw new Error(errData.error?.message || `Status ${response?.status}`);
+                if (!success) {
+                    throw new Error(lastError);
                 }
                 
-                const data = await response.json();
-                let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                
-                // Robust extraction: ensure pure JSON is parsed regardless of surrounding chat text.
+                // Robust extraction: Since we removed the JSON enforcer, we use a regex to pluck the JSON out 
+                // of any extra conversational text the AI might send.
                 const jsonMatch = text.match(/\{[\s\S]*\}/);
                 if (jsonMatch) text = jsonMatch[0];
                 
