@@ -148,7 +148,7 @@
             <div class="card">
                 <h2 class="text-3xl font-bold mb-2">What's for Tea?</h2>
                 <p class="mb-4 text-lg bg-blue-50 p-3 rounded-lg border-2 border-blue-200">
-                    <strong>Nana's Tip:</strong> Tell me what you have (e.g. "3 sausages") so I can be more accurate!
+                    <strong>Nana's Tip:</strong> Tell me how many or the weight (e.g. "3 sausages") so I can be more accurate!
                 </p>
                 <textarea id="ingredient-input" placeholder="What are we cooking today?" rows="2"></textarea>
                 <button onclick="getRecipeIdea()" class="btn-massive mt-4 bg-green-200">
@@ -273,7 +273,7 @@
     </nav>
 
     <script>
-        // GLOBAL SCOPE DEFINITIONS
+        // GLOBAL STATE
         window.tapCount = 0;
         window.tapTimer = null;
         let isLargeText = false;
@@ -281,7 +281,7 @@
         let chatHistory = []; 
         let currentResult = null;
 
-        // Platform auto-injection variable
+        // The platform provides the key if empty
         const apiKeyEnv = "";
 
         function getEffectiveKey() {
@@ -395,18 +395,22 @@
             const saveBtn = document.getElementById('save-btn');
             if (saveBtn) saveBtn.classList.add('hidden');
 
-            // --- CRITICAL STABILITY FIX ---
-            // Locked to v1beta for both environments to ensure camelCase naming and structured JSON works correctly.
-            // Model mapping ensures standard keys use stable flash.
+            // --- THE STABILITY FIX ---
+            // Use v1beta endpoint for everyone to get JSON support.
             const apiVersion = "v1beta"; 
+            
+            // Environment Logic: 
+            // 1. If in Preview environment without a personal key -> gemini-2.5-flash-preview-09-2025
+            // 2. All other cases (Nana's phone with saved key) -> gemini-1.5-flash
             const modelName = (isCanvasPreview && !hasSavedKey) ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
             
             const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${currentKey}`;
             
             const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temperatures in Celsius. For recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up, return a JSON object with keys: responseText and instructions. Only return raw JSON.";
 
-            // Conversation Injection Fix: Bypass "systemInstruction" Crash on Mobile
-            // We put the rules directly into history. This is 100% stable on all Gemini versions and tiers.
+            // --- UNIVERSAL HISTORY METHOD ---
+            // Bypass "systemInstruction" errors by putting instructions directly into the history.
+            // This works on every Gemini tier and version.
             if (chatHistory.length === 0) {
                 chatHistory.push({
                     role: "user",
@@ -414,7 +418,7 @@
                 });
                 chatHistory.push({
                     role: "model",
-                    parts: [{ text: "Understood. I am Nana's Ninja assistant and will reply strictly in the requested JSON format." }]
+                    parts: [{ text: "Understood. I will strictly act as Nana's assistant and reply in JSON format." }]
                 });
             }
 
@@ -426,7 +430,7 @@
             chatHistory.push({ role: "user", parts: userParts });
 
             try {
-                // v1beta JSON keys MUST be camelCase (e.g. responseMimeType)
+                // v1beta JSON keys MUST be camelCase
                 let payload = {
                     contents: chatHistory,
                     generationConfig: { 
@@ -457,7 +461,7 @@
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
-                // Extraction regex to pull JSON out of any surrounding chat text
+                // Extraction regex to pull JSON out of any surrounding text
                 const jsonMatch = text.match(/\{[\s\S]*\}/);
                 if (jsonMatch) text = jsonMatch[0];
                 
@@ -469,9 +473,9 @@
                 return result;
 
             } catch (err) {
-                console.error("Final Connection Error:", err);
+                console.error("Connection Error:", err);
                 if (resultContent) {
-                    resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. (Error: ${err.message}). Please check the setup link I sent you.</p>`;
+                    resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. (Error: ${err.message}). Please check the link I sent you.</p>`;
                 }
             } finally {
                 if (loader) loader.classList.add('hidden');
