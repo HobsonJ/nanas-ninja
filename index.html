@@ -18,7 +18,8 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             font-size: 22px; 
             line-height: 1.5;
-            padding-bottom: 100px;
+            /* Extra padding to ensure we can scroll past the large fixed input box */
+            padding-bottom: 300px;
         }
 
         .extra-large-text {
@@ -26,7 +27,7 @@
         }
 
         .btn-massive {
-            padding: 24px;
+            padding: 16px;
             border-radius: 16px;
             font-weight: bold;
             display: flex;
@@ -35,7 +36,7 @@
             gap: 12px;
             width: 100%;
             border: 4px solid var(--dark);
-            transition: transform 0.1;
+            transition: transform 0.1s;
             background-color: white;
             color: var(--dark);
             text-align: center;
@@ -86,6 +87,10 @@
             font-weight: bold;
             border-top: 4px solid var(--dark);
             background: white;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .loading-spinner {
@@ -130,75 +135,65 @@
         </div>
 
         <div class="flex gap-2 w-full max-w-md">
-            <button onclick="toggleTextSize()" class="btn-massive flex-1" style="padding: 12px; font-size: 20px;">
+            <button onclick="toggleTextSize()" class="btn-massive flex-1 py-3 text-xl">
                 Aa Text Size
             </button>
-            <button id="settings-cog" onclick="showPage('settings')" class="btn-massive w-16 hidden" style="padding: 12px; width: 80px;">
+            <button id="settings-cog" onclick="showPage('settings')" class="btn-massive w-16 hidden py-3 text-xl">
                 ⚙️
             </button>
         </div>
     </header>
 
-    <main id="app-container" class="p-6 max-w-2xl mx-auto">
+    <main id="app-container" class="p-4 max-w-2xl mx-auto">
         
-        <!-- MAIN HOME PAGE -->
-        <section id="page-home">
+        <!-- MAIN HOME PAGE (Chat Feed) -->
+        <section id="page-home" class="flex flex-col gap-4">
             
-            <!-- What's for Tea moved to top -->
-            <div class="card">
-                <h2 class="text-3xl font-bold mb-4">What's for Tea?</h2>
-                <p class="mb-4 text-lg bg-blue-50 p-3 rounded-lg border-2 border-blue-200">
-                    <strong>Nana's Tip:</strong> Tell me how many or the weight (e.g. "3 sausages") so I can be more accurate!
-                </p>
-                <textarea id="ingredient-input" placeholder="e.g. Sausages and a potato" rows="2"></textarea>
-                <button onclick="getRecipeIdea()" class="btn-massive mt-4 bg-green-200">
-                    Get an Idea 💡
-                </button>
-            </div>
-
-            <!-- Magic Camera moved below What's for Tea -->
-            <div class="card bg-amber-50">
-                <h2 class="text-3xl font-bold mb-4">The Magic Camera</h2>
-                <p class="mb-4">Not sure how to cook it? Show me a photo!</p>
-                <label for="camera-upload" class="btn-massive bg-amber-400 cursor-pointer">
-                    <span class="text-4xl">📸</span> Take a Photo
-                </label>
-                <input type="file" id="camera-upload" accept="image/*" capture="environment" class="hidden" onchange="handleImageUpload(event)">
-            </div>
-
-            <!-- Result Section -->
-            <div id="result-area" class="card hidden border-green-600 border-4">
-                <div id="loader" class="flex flex-col items-center gap-4 py-4 hidden">
-                    <div class="loading-spinner"></div>
-                    <p>Thinking... please wait, Nana.</p>
+            <div id="feed-area" class="flex flex-col gap-2">
+                <!-- Greeting Card (Hidden when chat starts) -->
+                <div id="greeting-card" class="card bg-amber-50">
+                    <h2 class="text-3xl font-bold mb-4">What's for Tea?</h2>
+                    <p class="mb-2 text-xl">Type what you want to cook below, or tap the camera to show me a photo!</p>
+                    <p class="text-lg italic text-gray-600 bg-white p-3 rounded-lg border-2 border-gray-200 mt-4">
+                        <strong>Nana's Tip:</strong> Include quantities (e.g. "3 sausages") so I can give you better timings.
+                    </p>
                 </div>
-                <div id="result-content"></div>
+
+                <!-- Recipe of the Day (Hidden when chat starts) -->
+                <div id="recipe-of-the-day-card" class="card">
+                    <h2 class="text-3xl font-bold mb-4">Recipe of the Day</h2>
+                    <div id="recipe-of-the-day-content"></div>
+                </div>
                 
-                <!-- Follow-up Section -->
-                <div id="follow-up-area" class="hidden border-t-2 border-gray-200 pt-4 mt-6">
-                    <p class="font-bold mb-2">Have a question about this?</p>
-                    <textarea id="follow-up-input" placeholder="e.g. Can I cook it from frozen?" rows="1" class="mb-3"></textarea>
-                    <button onclick="askFollowUp()" class="btn-massive bg-blue-100" style="padding: 16px; font-size: 20px;">
-                        Ask Nana 💬
-                    </button>
-                </div>
-
-                <div class="flex flex-col gap-3 mt-6 border-t-2 border-gray-200 pt-4">
-                    <button id="save-btn" onclick="saveToFavourites()" class="btn-massive hidden bg-amber-100">
-                        ⭐ Save to Favourites Tin
-                    </button>
-                    <button id="reset-btn" onclick="resetApp()" class="btn-massive bg-red-50 text-red-700">
-                        🔄 Start Again
-                    </button>
-                </div>
+                <!-- Chat messages and results will be injected here -->
             </div>
 
-            <div class="card">
-                <h2 class="text-3xl font-bold mb-4">Recipe of the Day</h2>
-                <div id="recipe-of-the-day-content">
-                    <!-- Loaded via JS -->
+            <!-- Sticky Bottom Input Area -->
+            <div class="fixed bottom-[60px] left-1/2 -translate-x-1/2 w-full max-w-2xl bg-gray-100 p-4 border-t-4 border-black z-40 pb-6 shadow-[0_-15px_25px_rgba(0,0,0,0.1)]">
+                <div class="flex flex-col gap-3">
+                    <textarea id="main-input" placeholder="Type a recipe or follow-up question here..." rows="2" class="text-xl"></textarea>
+                    
+                    <div class="flex gap-2">
+                        <button onclick="handleUserSubmit()" class="btn-massive bg-green-200 flex-1 py-4 text-2xl">
+                            Ask Nana 💬
+                        </button>
+                        <label for="camera-upload" class="btn-massive bg-amber-400 cursor-pointer flex-none w-20 py-4 mb-0 flex items-center justify-center">
+                            <span class="text-3xl">📸</span>
+                        </label>
+                        <input type="file" id="camera-upload" accept="image/*" capture="environment" class="hidden" onchange="handleImageUpload(event)">
+                    </div>
+
+                    <div class="flex gap-2 mt-1">
+                        <button id="save-btn" onclick="saveToFavourites()" class="btn-massive hidden bg-amber-100 py-3 text-xl">
+                            ⭐ Save to Tin
+                        </button>
+                        <button id="reset-btn" onclick="resetApp()" class="btn-massive hidden bg-red-50 text-red-700 py-3 text-xl">
+                            🔄 Start Again
+                        </button>
+                    </div>
                 </div>
             </div>
+            
         </section>
 
         <!-- FAVOURITES PAGE -->
@@ -277,7 +272,7 @@
     </main>
 
     <!-- Navigation Bar -->
-    <nav class="fixed bottom-0 left-0 right-0 bg-white flex border-t-4 border-black z-50">
+    <nav class="fixed bottom-0 left-0 right-0 bg-white flex border-t-4 border-black z-50 h-[60px]">
         <button onclick="showPage('home')" class="nav-item">🏠 Home</button>
         <button onclick="showPage('favourites')" class="nav-item">⭐ Tin</button>
         <button onclick="showPage('guide')" class="nav-item">📖 Guide</button>
@@ -290,7 +285,7 @@
         let currentResult = null;
         let isLargeText = false;
         let favourites = JSON.parse(localStorage.getItem('ninja_favourites') || "[]");
-        let chatHistory = []; // Keeps track of the conversation for follow-up questions
+        let chatHistory = []; 
 
         const britishClassics = [
             { name: "Perfect Roast Chicken", mode: "Air Fry", temp: "190°C", time: "45-55 mins", instructions: ["Season well.", "Place breast side down first.", "Flip halfway through cooking."] },
@@ -317,6 +312,10 @@
                 document.getElementById('api-key-input').value = apiKey;
             }
         };
+
+        function scrollToBottom() {
+            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        }
 
         function handleSecretTap() {
             tapCount++;
@@ -356,7 +355,6 @@
 
             try {
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
-                
                 if (!res.ok) throw new Error("Google rejected the key. Check your AI Studio billing settings.");
                 
                 const data = await res.json();
@@ -412,13 +410,15 @@
             inputs.forEach(el => el.classList.toggle('extra-large-text', isLargeText));
         }
 
+        // IMPROVED FORMATTING: Beautiful, numbered lists with good spacing
         function formatInstructions(instructions) {
             if (!instructions) return '';
             if (Array.isArray(instructions)) {
-                return '<ul class="list-decimal pl-6 space-y-3 mt-2 text-lg">' + instructions.map(step => `<li>${step}</li>`).join('') + '</ul>';
+                return '<ol class="list-decimal pl-6 space-y-4 mt-2 text-xl font-medium marker:font-bold marker:text-amber-600">' + 
+                       instructions.map(step => `<li class="pl-2 leading-relaxed text-gray-800">${step}</li>`).join('') + 
+                       '</ol>';
             }
-            // Fallback if AI returns a single string: break by newlines into paragraphs
-            return instructions.split('\n').filter(line => line.trim() !== '').map(line => `<p class="mb-3 text-lg">${line}</p>`).join('');
+            return instructions.split('\n').filter(line => line.trim() !== '').map(line => `<p class="mb-4 text-xl leading-relaxed text-gray-800">${line}</p>`).join('');
         }
 
         function loadRecipeOfDay() {
@@ -428,12 +428,82 @@
             if (container) {
                 container.innerHTML = `
                     <h3 class="text-2xl font-bold text-amber-700">${recipe.name}</h3>
-                    <p><strong>Mode:</strong> ${recipe.mode}</p>
-                    <p><strong>Temp:</strong> ${recipe.temp}</p>
-                    <p><strong>Time:</strong> ${recipe.time}</p>
-                    <div class="mt-3">${formatInstructions(recipe.instructions)}</div>
+                    <p class="text-lg"><strong>Mode:</strong> ${recipe.mode}</p>
+                    <p class="text-lg"><strong>Temp:</strong> ${recipe.temp}</p>
+                    <p class="text-lg"><strong>Time:</strong> ${recipe.time}</p>
+                    <div class="mt-4 border-t-2 border-gray-100 pt-4">${formatInstructions(recipe.instructions)}</div>
                 `;
             }
+        }
+
+        // --- CHAT UI LOGIC ---
+        function appendUserMessage(text) {
+            const feed = document.getElementById('feed-area');
+            const div = document.createElement('div');
+            div.className = "chat-message bg-white p-4 rounded-xl border-4 border-black mb-4 ml-12 text-right shadow-[4px_4px_0px_rgba(0,0,0,1)]";
+            div.innerHTML = `<p class="text-xl font-bold">${text}</p>`;
+            feed.appendChild(div);
+            scrollToBottom();
+        }
+
+        function appendLoading() {
+            const feed = document.getElementById('feed-area');
+            const div = document.createElement('div');
+            div.id = "current-loader";
+            div.className = "chat-message flex flex-col items-center gap-4 py-8 mb-4";
+            div.innerHTML = `<div class="loading-spinner"></div><p class="font-bold text-lg">Thinking... please wait, Nana.</p>`;
+            feed.appendChild(div);
+            scrollToBottom();
+        }
+
+        function removeLoading() {
+            const loader = document.getElementById('current-loader');
+            if (loader) loader.remove();
+        }
+
+        async function handleUserSubmit() {
+            const inputEl = document.getElementById('main-input');
+            const text = inputEl.value.trim();
+            if (!text) {
+                showMessage("Please type something first!");
+                return;
+            }
+            
+            inputEl.value = ""; 
+            
+            // Hide initial cards
+            document.getElementById('greeting-card')?.classList.add('hidden');
+            document.getElementById('recipe-of-the-day-card')?.classList.add('hidden');
+            document.getElementById('reset-btn').classList.remove('hidden');
+
+            appendUserMessage(text);
+            
+            if (chatHistory.length === 0) {
+                await callGemini(`I want to cook this: ${text}. Suggest a simple British meal I can cook in my Ninja CRISPi.`);
+            } else {
+                await callGemini(`Follow-up question from user: ${text}`);
+            }
+        }
+
+        async function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const base64 = e.target.result.split(',')[1];
+                const prompt = "Identify this food in the photo and give Ninja CRISPi settings (Mode, Temp in C, Time).";
+                
+                if (chatHistory.length === 0) {
+                    document.getElementById('greeting-card')?.classList.add('hidden');
+                    document.getElementById('recipe-of-the-day-card')?.classList.add('hidden');
+                    document.getElementById('reset-btn').classList.remove('hidden');
+                }
+                
+                appendUserMessage("📸 Sent a photo for you to look at!");
+                await callGemini(prompt, base64);
+            };
+            reader.readAsDataURL(file);
         }
 
         async function callGemini(prompt, imageData = null) {
@@ -443,23 +513,10 @@
                 return;
             }
 
-            const loader = document.getElementById('loader');
-            const resultArea = document.getElementById('result-area');
-            const resultContent = document.getElementById('result-content');
-            const followUpArea = document.getElementById('follow-up-area');
-            
-            resultArea.classList.remove('hidden');
-            loader.classList.remove('hidden');
-            
-            // Only clear content if it's a completely new request (not a follow-up)
-            if (chatHistory.length === 0) {
-                resultContent.innerHTML = "";
-                document.getElementById('save-btn').classList.add('hidden');
-                followUpArea.classList.add('hidden');
-            }
+            appendLoading();
+            document.getElementById('save-btn').classList.add('hidden');
 
             const isCanvasPreview = window.location.hostname.includes('goog') || window.location.hostname === '';
-            
             let targetModel = localStorage.getItem('ninja_model');
             if (!targetModel) {
                 targetModel = isCanvasPreview ? "models/gemini-2.5-flash-preview-09-2025" : "models/gemini-2.5-flash";
@@ -467,9 +524,9 @@
             
             const url = `https://generativelanguage.googleapis.com/v1beta/${targetModel}:generateContent?key=${apiKey}`;
             
-            // Format prompt differently if it's the first message vs a follow-up
             let userMessageText = prompt;
             if (chatHistory.length === 0) {
+                // Initial prompt needs instructions
                 const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temps in Celsius. Return ONLY a raw JSON object with keys: foodName, mode, temperature, time, and instructions (make instructions an array of strings for step-by-step formatting). For follow-up questions, return a JSON object with keys: responseText and instructions (optional array). Do not use markdown formatting like ```json.";
                 userMessageText = `[SYSTEM INSTRUCTIONS: ${systemPrompt}]\n\nUser Request: ${prompt}`;
             }
@@ -479,7 +536,6 @@
                 newUserPart.parts.push({ inlineData: { mimeType: "image/jpeg", data: imageData } });
             }
 
-            // Append new request to history payload
             let contents = [...chatHistory, newUserPart];
 
             try {
@@ -500,14 +556,13 @@
 
                 if (!response || !response.ok) {
                     const errData = await response.json().catch(() => ({}));
-                    console.error("API Error Payload:", errData);
+                    console.error("API Error:", errData);
                     throw new Error(errData.error?.message || `Status ${response?.status}`);
                 }
                 
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
                 
-                // Aggressive Cleanup
                 text = text.replace(/```json/g, '').replace(/```/g, '').trim();
                 const jsonMatch = text.match(/\{[\s\S]*\}/);
                 
@@ -519,117 +574,76 @@
                 
                 const result = JSON.parse(text);
                 
-                // Update history with successful turn
+                // Update history
                 chatHistory.push(newUserPart);
                 chatHistory.push({ role: "model", parts: [{ text: text }] });
 
+                removeLoading();
                 displayResult(result);
                 return result;
 
             } catch (err) {
-                resultContent.innerHTML += `
-                    <div class="bg-red-50 p-4 border-2 border-red-300 rounded-xl mb-4 mt-4 text-dark">
-                        <p class="text-xl font-bold mb-2 text-red-700">Connection failed.</p>
-                        <p class="mb-2 text-sm italic">${err.message}</p>
-                    </div>
+                removeLoading();
+                const feed = document.getElementById('feed-area');
+                const errDiv = document.createElement('div');
+                errDiv.className = "chat-message bg-red-50 p-4 border-2 border-red-300 rounded-xl mb-4 text-dark";
+                errDiv.innerHTML = `
+                    <p class="text-xl font-bold mb-2 text-red-700">Connection failed.</p>
+                    <p class="mb-2 text-sm italic">${err.message}</p>
                 `;
+                feed.appendChild(errDiv);
+                scrollToBottom();
                 console.error(err);
-            } finally {
-                loader.classList.add('hidden');
             }
         }
 
         function displayResult(result) {
-            const resultContent = document.getElementById('result-content');
+            const feed = document.getElementById('feed-area');
+            const div = document.createElement('div');
             
             if (result.foodName) {
-                // Initial Recipe Result
                 currentResult = result;
-                resultContent.innerHTML = `
-                    <h3 class="text-3xl font-bold mb-2">${result.foodName}</h3>
-                    <div class="bg-amber-100 p-4 rounded-xl border-2 border-black mb-4">
-                        <p><strong>Ninja Setting:</strong> ${result.mode}</p>
-                        <p><strong>Temperature:</strong> ${result.temperature}°Celsius</p>
-                        <p><strong>Time:</strong> ${result.time}</p>
+                div.className = "chat-message card border-green-600 border-4 mb-4 mr-6";
+                div.innerHTML = `
+                    <h3 class="text-3xl font-black mb-4 text-green-800">${result.foodName}</h3>
+                    <div class="bg-amber-100 p-4 rounded-xl border-2 border-black mb-6 shadow-inner">
+                        <p class="text-xl mb-2"><strong>Ninja Setting:</strong> ${result.mode}</p>
+                        <p class="text-xl mb-2"><strong>Temperature:</strong> ${result.temperature}°Celsius</p>
+                        <p class="text-xl"><strong>Time:</strong> ${result.time}</p>
                     </div>
-                    <p class="mb-2 font-bold text-xl border-b-2 border-gray-200 pb-2">How to cook it:</p>
-                    <div class="mb-6">${formatInstructions(result.instructions)}</div>
+                    <h4 class="font-bold text-2xl border-b-2 border-gray-200 pb-2 mb-4">How to cook it:</h4>
+                    <div class="mb-2">${formatInstructions(result.instructions)}</div>
                 `;
                 document.getElementById('save-btn').classList.remove('hidden');
             } else {
-                // Follow-up Answer Result
-                resultContent.innerHTML += `
-                    <div class="bg-blue-50 p-4 rounded-xl border-2 border-blue-300 mb-4 mt-6">
-                        <p class="text-lg font-bold mb-2 text-blue-800">Nana's Answer:</p>
-                        <p class="text-lg mb-3">${result.responseText || 'Here is what I found:'}</p>
-                        ${result.instructions && result.instructions.length > 0 ? `<div class="mt-3 border-t border-blue-200 pt-3">${formatInstructions(result.instructions)}</div>` : ''}
-                    </div>
+                div.className = "chat-message bg-blue-50 p-5 rounded-xl border-2 border-blue-300 mb-4 mr-8 shadow-sm";
+                div.innerHTML = `
+                    <p class="text-xl font-black mb-3 text-blue-800">Nana says:</p>
+                    <p class="text-xl leading-relaxed mb-4">${result.responseText || 'Here is what I found:'}</p>
+                    ${result.instructions && result.instructions.length > 0 ? `<div class="mt-4 border-t-2 border-blue-200 pt-4">${formatInstructions(result.instructions)}</div>` : ''}
                 `;
             }
             
-            document.getElementById('follow-up-area').classList.remove('hidden');
-            resultContent.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            feed.appendChild(div);
+            scrollToBottom();
         }
 
-        async function askFollowUp() {
-            const input = document.getElementById('follow-up-input');
-            const question = input ? input.value.trim() : "";
-            if (!question) return;
-            input.value = ""; // clear input
-            
-            // Optionally add user's question to the UI right away so they know it sent
-            const resultContent = document.getElementById('result-content');
-            resultContent.innerHTML += `
-                <div class="bg-gray-100 p-3 rounded-xl border-2 border-gray-300 mb-2 mt-4 text-right ml-8">
-                    <p class="italic text-gray-700">You asked: ${question}</p>
-                </div>
-            `;
-            
-            await callGemini(`Follow-up question from user: ${question}`);
-        }
-
-        async function handleImageUpload(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                const base64 = e.target.result.split(',')[1];
-                const prompt = "Identify this food in the photo and give Ninja CRISPi settings (Mode, Temp in C, Time).";
-                resetApp(false);
-                await callGemini(prompt, base64);
-            };
-            reader.readAsDataURL(file);
-        }
-
-        async function getRecipeIdea() {
-            const input = document.getElementById('ingredient-input').value;
-            if (!input) {
-                showMessage("Tell me what you have first, Nana!");
-                return;
-            }
-            const prompt = `I have these ingredients: ${input}. Suggest a simple British meal I can cook in my Ninja CRISPi.`;
-            resetApp(false);
-            await callGemini(prompt);
-        }
-
-        function resetApp(hideArea = true) {
+        function resetApp() {
             chatHistory = []; 
             currentResult = null;
-            const ingredientInput = document.getElementById('ingredient-input');
-            const followUpInput = document.getElementById('follow-up-input');
-            const resultContent = document.getElementById('result-content');
-            const followUpArea = document.getElementById('follow-up-area');
             
-            if (ingredientInput) ingredientInput.value = "";
-            if (followUpInput) followUpInput.value = "";
-            if (resultContent) resultContent.innerHTML = "";
-            if (followUpArea) followUpArea.classList.add('hidden');
-            if (hideArea) {
-                const resultArea = document.getElementById('result-area');
-                if (resultArea) resultArea.classList.add('hidden');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            }
+            // Remove chat history visually
+            const messages = document.querySelectorAll('.chat-message');
+            messages.forEach(m => m.remove());
+            
+            document.getElementById('greeting-card')?.classList.remove('hidden');
+            document.getElementById('recipe-of-the-day-card')?.classList.remove('hidden');
+            
+            document.getElementById('main-input').value = "";
+            document.getElementById('save-btn').classList.add('hidden');
+            document.getElementById('reset-btn').classList.add('hidden');
+            
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
         function saveToFavourites() {
