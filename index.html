@@ -163,7 +163,6 @@
                 <label for="camera-upload" class="btn-massive bg-amber-400 cursor-pointer">
                     <span class="text-4xl">📸</span> Take a Photo
                 </label>
-                <!-- Forces back camera on mobile devices -->
                 <input type="file" id="camera-upload" accept="image/*" capture="environment" class="hidden" onchange="handleImageUpload(event)">
             </div>
 
@@ -273,14 +272,13 @@
     </nav>
 
     <script>
-        // Use window properties for global state to prevent ReferenceErrors
-        window.tapCount = 0;
-        window.tapTimer = null;
+        // GLOBAL SCOPE INITIALIZATION
+        let tapCount = 0;
+        let tapTimer = null;
         let isLargeText = false;
         let favourites = JSON.parse(localStorage.getItem('ninja_favourites') || "[]");
         let chatHistory = []; 
         let currentResult = null;
-
         const apiKeyEnv = "";
 
         function getEffectiveKey() {
@@ -318,16 +316,16 @@
         };
 
         function handleSecretTap() {
-            window.tapCount++;
-            clearTimeout(window.tapTimer);
-            window.tapTimer = setTimeout(() => { window.tapCount = 0; }, 1000);
-            if (window.tapCount >= 5) {
+            tapCount++;
+            clearTimeout(tapTimer);
+            tapTimer = setTimeout(() => { tapCount = 0; }, 1000);
+            if (tapCount >= 5) {
                 const cog = document.getElementById('settings-cog');
                 if (cog) {
                     cog.classList.toggle('hidden');
                     showMessage(cog.classList.contains('hidden') ? "Settings Hidden" : "Settings Revealed! ⚙️");
                 }
-                window.tapCount = 0;
+                tapCount = 0;
             }
         }
 
@@ -394,18 +392,18 @@
             const saveBtn = document.getElementById('save-btn');
             if (saveBtn) saveBtn.classList.add('hidden');
 
-            // --- THE STABILITY FIX ---
-            // Live Site (GitHub) uses stable v1 with gemini-1.5-flash.
-            // Canvas uses v1beta with the preview model.
+            // --- CRITICAL STABILITY LOGIC ---
+            // If on GitHub (Live Site), use v1 endpoint for maximum free-tier compatibility.
+            // If in Canvas, use v1beta for testing environment support.
             const apiVersion = (isCanvasPreview && !hasSavedKey) ? "v1beta" : "v1";
             const modelName = (isCanvasPreview && !hasSavedKey) ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
             
             const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${currentKey}`;
             
-            // CONVERSATION INJECTION: Bypass all 'systemInstruction' field errors.
+            // Conversation Injection: This is the only 100% reliable method to set persona without crashing on mobile.
             if (chatHistory.length === 0) {
-                const instructions = "You are 'Nana', an elderly British lady and Ninja CRISPi assistant. Use UK English. Give temps in Celsius. Reply ONLY with a raw JSON object containing: foodName, mode, temperature, time, and instructions. For chats, use responseText and instructions.";
-                chatHistory.push({ role: "user", parts: [{ text: "System Instructions: " + instructions }] });
+                const nanaSystem = "You are 'Nana', an elderly British lady and Ninja CRISPi assistant. Use UK English. Give temps in Celsius. Reply ONLY with raw JSON containing: foodName, mode, temperature, time, and instructions. For follow-ups, use responseText and instructions.";
+                chatHistory.push({ role: "user", parts: [{ text: "SYSTEM INSTRUCTIONS: " + nanaSystem }] });
                 chatHistory.push({ role: "model", parts: [{ text: "Understood. Nana is ready to help." }] });
             }
 
@@ -417,10 +415,18 @@
             chatHistory.push({ role: "user", parts: userParts });
 
             try {
-                // Simplified payload compatible with both v1 and v1beta
+                // Construct payload dynamically based on API version detected
                 let payload = { contents: chatHistory };
+                
+                if (apiVersion === "v1beta") {
+                    payload.generationConfig = { responseMimeType: "application/json" };
+                } else {
+                    // GA Standard fields use snake_case
+                    payload.generation_config = { response_mime_type: "application/json" };
+                }
 
                 let response;
+                // Exponential backoff retry logic
                 for (let i = 0; i < 5; i++) {
                     try {
                         response = await fetch(url, {
@@ -435,17 +441,16 @@
 
                 if (!response || !response.ok) {
                     const errData = await response.json().catch(() => ({}));
+                    console.error("Gemini API Error Response:", errData);
                     throw new Error(errData.error?.message || `Status ${response?.status}`);
                 }
                 
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
-                // Sanitize output (Extract JSON block if text is present around it)
+                // Robust JSON extraction (removes markdown if AI adds it)
                 const jsonMatch = text.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                    text = jsonMatch[0];
-                }
+                if (jsonMatch) text = jsonMatch[0];
                 
                 const result = JSON.parse(text);
                 chatHistory.push({ role: "model", parts: [{ text: text }] });
