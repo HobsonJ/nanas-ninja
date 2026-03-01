@@ -272,8 +272,14 @@
     </nav>
 
     <script>
-        function getApiKey() {
-            return localStorage.getItem('ninja_api_key') || "";
+        // The execution environment provides the key at runtime if apiKey is an empty string.
+        let apiKey = "";
+
+        // Helper to get the best available key
+        function getEffectiveApiKey() {
+            const savedKey = localStorage.getItem('ninja_api_key');
+            if (savedKey && savedKey.trim() !== "") return savedKey.trim();
+            return apiKey; // Fallback to platform-injected key
         }
 
         let currentResult = null;
@@ -298,15 +304,17 @@
             if (setupKey) {
                 const cleanKey = setupKey.trim();
                 localStorage.setItem('ninja_api_key', cleanKey);
+                // Clean the URL
                 window.history.replaceState({}, document.title, window.location.pathname);
                 showMessage("Nana's Ninja is Ready! 🪄");
+                // Refresh the settings input
                 const keyInput = document.getElementById('api-key-input');
                 if (keyInput) keyInput.value = cleanKey;
             }
 
             loadRecipeOfDay();
             updateFavouritesList();
-            const currentKey = getApiKey();
+            const currentKey = getEffectiveApiKey();
             if (document.getElementById('api-key-input')) {
                 document.getElementById('api-key-input').value = currentKey;
             }
@@ -371,14 +379,10 @@
         }
 
         async function callGemini(newPrompt, imageData = null) {
-            const currentKey = getApiKey();
+            const currentKey = getEffectiveApiKey();
             const isCanvasPreview = window.location.hostname.includes('goog') || window.location.hostname === '';
             
-            // Environment key logic: If we are in Canvas preview, we must use the specific preview model.
-            // If the user has NOT provided their own key yet, the environment will provide one if the key param is empty.
-            const activeKey = currentKey; 
-
-            if (!activeKey && !isCanvasPreview) {
+            if (!currentKey && !isCanvasPreview) {
                 showMessage("I need setting up! Tap my face 5 times.");
                 return;
             }
@@ -393,10 +397,14 @@
             const saveBtn = document.getElementById('save-btn');
             if (saveBtn) saveBtn.classList.add('hidden');
 
-            // CRITICAL FIX: The preview environment ONLY supports gemini-2.5-flash-preview-09-2025 in v1beta.
-            // When running on GitHub with a personal key, gemini-1.5-flash is preferred.
-            const modelName = isCanvasPreview ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${activeKey}`;
+            // CRITICAL: Stable logic for model and API version
+            // For personal keys (GitHub), use v1 / gemini-1.5-flash for reliability.
+            // For platform keys (Preview), use v1beta / gemini-2.5-flash-preview-09-2025.
+            const isPlatformKey = isCanvasPreview && !localStorage.getItem('ninja_api_key');
+            const modelName = isPlatformKey ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
+            const apiVersion = isPlatformKey ? "v1beta" : "v1";
+            
+            const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${currentKey}`;
             
             let userParts = [{ text: newPrompt }];
             if (imageData) {
@@ -408,18 +416,31 @@
             const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English. For recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up questions, return a JSON object with keys: responseText and instructions (optional). Only return the raw JSON object.";
 
             try {
+                let body = {
+                    contents: chatHistory,
+                    generationConfig: { responseMimeType: "application/json" }
+                };
+
+                // systemInstruction is only for v1beta. For v1, we append it to the context.
+                if (apiVersion === "v1beta") {
+                    body.systemInstruction = { parts: [{ text: systemPrompt }] };
+                } else {
+                    // For v1, we add a simulated system message if history is empty
+                    if (chatHistory.length === 1) {
+                        chatHistory.unshift(
+                            { role: "user", parts: [{ text: "SYSTEM INSTRUCTION: " + systemPrompt }] },
+                            { role: "model", parts: [{ text: "Understood. I am Nana's Ninja assistant." }] }
+                        );
+                    }
+                }
+
                 let response;
-                // Exponential backoff retry logic
                 for (let i = 0; i < 5; i++) {
                     try {
                         response = await fetch(url, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                contents: chatHistory,
-                                systemInstruction: { parts: [{ text: systemPrompt }] },
-                                generationConfig: { responseMimeType: "application/json" }
-                            })
+                            body: JSON.stringify(body)
                         });
                         if (response.ok) break;
                     } catch (e) {}
@@ -435,7 +456,6 @@
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
-                // Sanitize JSON response strings
                 text = text.replace(/```json/g, '').replace(/```/g, '').trim();
                 const result = JSON.parse(text);
                 
@@ -527,10 +547,12 @@
             const ingredientInput = document.getElementById('ingredient-input');
             const followUpInput = document.getElementById('follow-up-input');
             const resultContent = document.getElementById('result-content');
+            const followUpArea = document.getElementById('follow-up-area');
             
             if (ingredientInput) ingredientInput.value = "";
             if (followUpInput) followUpInput.value = "";
             if (resultContent) resultContent.innerHTML = "";
+            if (followUpArea) followUpArea.classList.add('hidden');
             if (hideArea) {
                 const resultArea = document.getElementById('result-area');
                 if (resultArea) resultArea.classList.add('hidden');
