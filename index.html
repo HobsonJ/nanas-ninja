@@ -273,7 +273,7 @@
     </nav>
 
     <script>
-        // Platform auto-injection variable
+        // Use an empty string for platform injection check
         const apiKeyEnv = "";
 
         function getEffectiveKey() {
@@ -394,24 +394,18 @@
             const saveBtn = document.getElementById('save-btn');
             if (saveBtn) saveBtn.classList.add('hidden');
 
-            // --- UNIVERSAL CONNECTION LOGIC ---
+            // --- CRITICAL FIX: UNIFIED ENDPOINT AND CAMELCASE ---
+            // Locked to v1beta for both environments.
             const apiVersion = "v1beta"; 
+            
+            // Model Logic: 
+            // 1. If in Preview environment without a personal key -> gemini-2.5-flash-preview-09-2025
+            // 2. All other cases (Nana's phone with saved key) -> gemini-1.5-flash
             const modelName = (isCanvasPreview && !hasSavedKey) ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
             
             const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${currentKey}`;
             
             const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temperatures in Celsius. For recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up, return a JSON object with keys: responseText and instructions. Only return raw JSON.";
-
-            if (chatHistory.length === 0) {
-                chatHistory.push({
-                    role: "user",
-                    parts: [{ text: "SYSTEM INSTRUCTIONS: " + systemPrompt }]
-                });
-                chatHistory.push({
-                    role: "model",
-                    parts: [{ text: "Understood. I am Nana's Ninja assistant and will only reply in the requested JSON format." }]
-                });
-            }
 
             let userParts = [{ text: newPrompt }];
             if (imageData) {
@@ -421,14 +415,17 @@
             chatHistory.push({ role: "user", parts: userParts });
 
             try {
+                // v1beta JSON keys MUST be camelCase (e.g. systemInstruction, responseMimeType)
                 let payload = {
                     contents: chatHistory,
+                    systemInstruction: { parts: [{ text: systemPrompt }] },
                     generationConfig: { 
                         responseMimeType: "application/json" 
                     }
                 };
 
                 let response;
+                // Exponential backoff retry logic
                 for (let i = 0; i < 5; i++) {
                     try {
                         response = await fetch(url, {
@@ -450,6 +447,7 @@
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
+                // Sanitize JSON response strings
                 text = text.replace(/```json/g, '').replace(/```/g, '').trim();
                 const result = JSON.parse(text);
                 
