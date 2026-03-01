@@ -273,13 +273,15 @@
     </nav>
 
     <script>
-        // Global variables defined at window level to prevent ReferenceErrors
+        // CRITICAL: Global variables at top level to fix ReferenceErrors
         window.tapCount = 0;
         window.tapTimer = null;
         let isLargeText = false;
         let favourites = JSON.parse(localStorage.getItem('ninja_favourites') || "[]");
         let chatHistory = []; 
         let currentResult = null;
+
+        // Use an empty string for platform injection check
         const apiKeyEnv = "";
 
         function getEffectiveKey() {
@@ -393,20 +395,29 @@
             const saveBtn = document.getElementById('save-btn');
             if (saveBtn) saveBtn.classList.add('hidden');
 
-            // --- UNIVERSAL STABILITY LOGIC ---
-            // If we have a personal key (Live Site), use the v1 endpoint with snake_case naming.
-            // If we are in Canvas (Preview), use the v1beta endpoint with camelCase naming.
-            const isPlatformPreview = isCanvasPreview && !hasSavedKey;
-            const apiVersion = isPlatformPreview ? "v1beta" : "v1";
-            const modelName = isPlatformPreview ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
+            // --- UNIVERSAL FIX ---
+            // Locked to v1beta for both environments to ensure camelCase naming and structured JSON works correctly.
+            // Model Logic: 
+            // 1. If in Preview environment without a personal key -> gemini-2.5-flash-preview-09-2025
+            // 2. All other cases (Nana's phone with saved key) -> gemini-1.5-flash
+            const apiVersion = "v1beta"; 
+            const modelName = (isCanvasPreview && !hasSavedKey) ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
             
             const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${currentKey}`;
             
-            // Conversation Injection: Bypass 'systemInstruction' crash by putting persona in the history.
+            const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temperatures in Celsius. For recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up, return a JSON object with keys: responseText and instructions. Only return raw JSON.";
+
+            // Conversation Injection: Bypass 'systemInstruction' Crash on Mobile
+            // We put the rules directly into history. This is 100% stable on all Gemini versions.
             if (chatHistory.length === 0) {
-                const instructions = "You are 'Nana', an elderly British lady and Ninja CRISPi assistant. Reply ONLY with raw JSON containing: foodName, mode, temperature, time, and instructions. For chat, use responseText and instructions.";
-                chatHistory.push({ role: "user", parts: [{ text: "SYSTEM INSTRUCTIONS: " + instructions }] });
-                chatHistory.push({ role: "model", parts: [{ text: "Understood. Nana is ready." }] });
+                chatHistory.push({
+                    role: "user",
+                    parts: [{ text: "SYSTEM INSTRUCTIONS: " + systemPrompt }]
+                });
+                chatHistory.push({
+                    role: "model",
+                    parts: [{ text: "Understood. I am Nana's Ninja assistant and will reply strictly in the requested JSON format." }]
+                });
             }
 
             let userParts = [{ text: newPrompt }];
@@ -417,16 +428,13 @@
             chatHistory.push({ role: "user", parts: userParts });
 
             try {
-                // Construct payload based on API version detected
-                let payload = { contents: chatHistory };
-                
-                if (apiVersion === "v1beta") {
-                    // camelCase for Preview
-                    payload.generationConfig = { responseMimeType: "application/json" };
-                } else {
-                    // snake_case for Mobile/Live
-                    payload.generation_config = { response_mime_type: "application/json" };
-                }
+                // v1beta JSON keys MUST be camelCase (e.g. responseMimeType)
+                let payload = {
+                    contents: chatHistory,
+                    generationConfig: { 
+                        responseMimeType: "application/json" 
+                    }
+                };
 
                 let response;
                 // Exponential backoff retry logic
@@ -520,7 +528,7 @@
             reader.onload = async (e) => {
                 const base64 = e.target.result.split(',')[1];
                 resetApp(false); 
-                await callGemini("Identify this food and give Ninja CRISPi settings (Mode, Temp, Time).", base64);
+                await callGemini("Identify this food in the photo and give Ninja CRISPi settings (Mode, Temp in C, Time).", base64);
             };
             reader.readAsDataURL(file);
         }
