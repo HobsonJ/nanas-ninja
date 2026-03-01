@@ -143,15 +143,8 @@
         
         <!-- MAIN HOME PAGE -->
         <section id="page-home">
-            <div class="card bg-amber-50">
-                <h2 class="text-3xl font-bold mb-4">The Magic Camera</h2>
-                <p class="mb-4">Not sure how to cook it? Show me a photo!</p>
-                <label for="camera-upload" class="btn-massive bg-amber-400 cursor-pointer">
-                    <span class="text-4xl">📸</span> Take a Photo
-                </label>
-                <input type="file" id="camera-upload" accept="image/*" capture="environment" class="hidden" onchange="handleImageUpload(event)">
-            </div>
-
+            
+            <!-- What's for Tea moved to top -->
             <div class="card">
                 <h2 class="text-3xl font-bold mb-4">What's for Tea?</h2>
                 <p class="mb-4 text-lg bg-blue-50 p-3 rounded-lg border-2 border-blue-200">
@@ -163,6 +156,16 @@
                 </button>
             </div>
 
+            <!-- Magic Camera moved below What's for Tea -->
+            <div class="card bg-amber-50">
+                <h2 class="text-3xl font-bold mb-4">The Magic Camera</h2>
+                <p class="mb-4">Not sure how to cook it? Show me a photo!</p>
+                <label for="camera-upload" class="btn-massive bg-amber-400 cursor-pointer">
+                    <span class="text-4xl">📸</span> Take a Photo
+                </label>
+                <input type="file" id="camera-upload" accept="image/*" capture="environment" class="hidden" onchange="handleImageUpload(event)">
+            </div>
+
             <!-- Result Section -->
             <div id="result-area" class="card hidden border-green-600 border-4">
                 <div id="loader" class="flex flex-col items-center gap-4 py-4 hidden">
@@ -170,9 +173,24 @@
                     <p>Thinking... please wait, Nana.</p>
                 </div>
                 <div id="result-content"></div>
-                <button id="save-btn" onclick="saveToFavourites()" class="btn-massive mt-4 hidden bg-amber-100">
-                    ⭐ Save to Favourites Tin
-                </button>
+                
+                <!-- Follow-up Section -->
+                <div id="follow-up-area" class="hidden border-t-2 border-gray-200 pt-4 mt-6">
+                    <p class="font-bold mb-2">Have a question about this?</p>
+                    <textarea id="follow-up-input" placeholder="e.g. Can I cook it from frozen?" rows="1" class="mb-3"></textarea>
+                    <button onclick="askFollowUp()" class="btn-massive bg-blue-100" style="padding: 16px; font-size: 20px;">
+                        Ask Nana 💬
+                    </button>
+                </div>
+
+                <div class="flex flex-col gap-3 mt-6 border-t-2 border-gray-200 pt-4">
+                    <button id="save-btn" onclick="saveToFavourites()" class="btn-massive hidden bg-amber-100">
+                        ⭐ Save to Favourites Tin
+                    </button>
+                    <button id="reset-btn" onclick="resetApp()" class="btn-massive bg-red-50 text-red-700">
+                        🔄 Start Again
+                    </button>
+                </div>
             </div>
 
             <div class="card">
@@ -230,7 +248,7 @@
             <p class="mt-4 italic text-lg text-center">Note: Always check that meat is piping hot!</p>
         </section>
 
-        <!-- SETTINGS PAGE (Model Scanner Added) -->
+        <!-- SETTINGS PAGE -->
         <section id="page-settings" class="hidden">
             <h2 class="text-4xl font-black mb-6">App Settings</h2>
             <div class="card">
@@ -272,13 +290,14 @@
         let currentResult = null;
         let isLargeText = false;
         let favourites = JSON.parse(localStorage.getItem('ninja_favourites') || "[]");
+        let chatHistory = []; // Keeps track of the conversation for follow-up questions
 
         const britishClassics = [
-            { name: "Perfect Roast Chicken", mode: "Air Fry", temp: "190°C", time: "45-55 mins", instructions: "Season well. Place breast side down first, then flip halfway through." },
-            { name: "The Best Toasted Sandwich", mode: "Air Fry", temp: "200°C", time: "8 mins", instructions: "Butter the outside of the bread. Add cheese and ham. Flip after 5 mins." },
-            { name: "Crispy Fish Fingers", mode: "Max Crisp", temp: "210°C", time: "10-12 mins", instructions: "Spread evenly. No need for extra oil. Shake halfway." },
-            { name: "Quick Apple Crumble", mode: "Bake", temp: "170°C", time: "20 mins", instructions: "Cook fruit first for 5 mins, add topping, then bake until golden." },
-            { name: "Pork Sausages", mode: "Air Fry", temp: "180°C", time: "12-15 mins", instructions: "Prick skins slightly. Shake the basket halfway through." }
+            { name: "Perfect Roast Chicken", mode: "Air Fry", temp: "190°C", time: "45-55 mins", instructions: ["Season well.", "Place breast side down first.", "Flip halfway through cooking."] },
+            { name: "The Best Toasted Sandwich", mode: "Air Fry", temp: "200°C", time: "8 mins", instructions: ["Butter the outside of the bread.", "Add cheese and ham.", "Flip after 5 mins."] },
+            { name: "Crispy Fish Fingers", mode: "Max Crisp", temp: "210°C", time: "10-12 mins", instructions: ["Spread evenly in the basket.", "No need for extra oil.", "Shake halfway through cooking."] },
+            { name: "Quick Apple Crumble", mode: "Bake", temp: "170°C", time: "20 mins", instructions: ["Cook fruit first for 5 mins.", "Add crumble topping.", "Bake until golden brown."] },
+            { name: "Pork Sausages", mode: "Air Fry", temp: "180°C", time: "12-15 mins", instructions: ["Prick skins slightly.", "Place evenly in the basket.", "Shake the basket halfway through."] }
         ];
 
         window.onload = () => {
@@ -321,7 +340,6 @@
             window.scrollTo(0,0);
         }
 
-        // --- MODEL SCANNER FUNCTION ---
         async function fetchModels() {
             const key = document.getElementById('api-key-input').value.trim();
             const statusEl = document.getElementById('model-status');
@@ -339,9 +357,7 @@
             try {
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
                 
-                if (!res.ok) {
-                    throw new Error("Google rejected the key. Check your AI Studio billing settings.");
-                }
+                if (!res.ok) throw new Error("Google rejected the key. Check your AI Studio billing settings.");
                 
                 const data = await res.json();
                 const validModels = data.models.filter(m => 
@@ -350,14 +366,12 @@
                     m.name.includes('gemini')
                 );
 
-                if (validModels.length === 0) {
-                    throw new Error("Key is valid, but zero models are unlocked for it.");
-                }
+                if (validModels.length === 0) throw new Error("Key is valid, but zero models are unlocked for it.");
 
                 selectEl.innerHTML = '';
                 validModels.forEach(m => {
                     const opt = document.createElement('option');
-                    opt.value = m.name; // e.g. models/gemini-2.5-flash
+                    opt.value = m.name;
                     opt.textContent = m.displayName || m.name;
                     selectEl.appendChild(opt);
                 });
@@ -366,7 +380,6 @@
                 statusEl.innerText = `Success! Found ${validModels.length} models. Pick one and Save.`;
                 statusEl.className = "text-sm italic font-bold text-green-600 mb-4";
 
-                // Auto-select previously saved if it exists
                 const savedModel = localStorage.getItem('ninja_model');
                 if (savedModel && Array.from(selectEl.options).some(o => o.value === savedModel)) {
                     selectEl.value = savedModel;
@@ -399,6 +412,15 @@
             inputs.forEach(el => el.classList.toggle('extra-large-text', isLargeText));
         }
 
+        function formatInstructions(instructions) {
+            if (!instructions) return '';
+            if (Array.isArray(instructions)) {
+                return '<ul class="list-decimal pl-6 space-y-3 mt-2 text-lg">' + instructions.map(step => `<li>${step}</li>`).join('') + '</ul>';
+            }
+            // Fallback if AI returns a single string: break by newlines into paragraphs
+            return instructions.split('\n').filter(line => line.trim() !== '').map(line => `<p class="mb-3 text-lg">${line}</p>`).join('');
+        }
+
         function loadRecipeOfDay() {
             const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
             const recipe = britishClassics[dayOfYear % britishClassics.length];
@@ -409,7 +431,7 @@
                     <p><strong>Mode:</strong> ${recipe.mode}</p>
                     <p><strong>Temp:</strong> ${recipe.temp}</p>
                     <p><strong>Time:</strong> ${recipe.time}</p>
-                    <p class="mt-2">${recipe.instructions}</p>
+                    <div class="mt-3">${formatInstructions(recipe.instructions)}</div>
                 `;
             }
         }
@@ -424,16 +446,20 @@
             const loader = document.getElementById('loader');
             const resultArea = document.getElementById('result-area');
             const resultContent = document.getElementById('result-content');
+            const followUpArea = document.getElementById('follow-up-area');
             
             resultArea.classList.remove('hidden');
             loader.classList.remove('hidden');
-            resultContent.innerHTML = "";
-            document.getElementById('save-btn').classList.add('hidden');
+            
+            // Only clear content if it's a completely new request (not a follow-up)
+            if (chatHistory.length === 0) {
+                resultContent.innerHTML = "";
+                document.getElementById('save-btn').classList.add('hidden');
+                followUpArea.classList.add('hidden');
+            }
 
             const isCanvasPreview = window.location.hostname.includes('goog') || window.location.hostname === '';
             
-            // --- THE 2.5 FLASH UPDATE ---
-            // Grab the exact model selected from the dropdown, OR default to the confirmed working 2.5 Flash model!
             let targetModel = localStorage.getItem('ninja_model');
             if (!targetModel) {
                 targetModel = isCanvasPreview ? "models/gemini-2.5-flash-preview-09-2025" : "models/gemini-2.5-flash";
@@ -441,24 +467,22 @@
             
             const url = `https://generativelanguage.googleapis.com/v1beta/${targetModel}:generateContent?key=${apiKey}`;
             
-            // Inject Persona Directly
-            const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temps in Celsius. Return ONLY a raw JSON object with keys: foodName, mode, temperature, time, and instructions. Do not use markdown formatting like ```json.";
-            let finalPrompt = `[SYSTEM INSTRUCTIONS: ${systemPrompt}]\n\nUser Request: ${prompt}`;
-
-            let contents = [];
-            if (imageData) {
-                contents = [{
-                    parts: [
-                        { text: finalPrompt },
-                        { inlineData: { mimeType: "image/jpeg", data: imageData } }
-                    ]
-                }];
-            } else {
-                contents = [{ parts: [{ text: finalPrompt }] }];
+            // Format prompt differently if it's the first message vs a follow-up
+            let userMessageText = prompt;
+            if (chatHistory.length === 0) {
+                const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temps in Celsius. Return ONLY a raw JSON object with keys: foodName, mode, temperature, time, and instructions (make instructions an array of strings for step-by-step formatting). For follow-up questions, return a JSON object with keys: responseText and instructions (optional array). Do not use markdown formatting like ```json.";
+                userMessageText = `[SYSTEM INSTRUCTIONS: ${systemPrompt}]\n\nUser Request: ${prompt}`;
             }
 
+            let newUserPart = { role: "user", parts: [{ text: userMessageText }] };
+            if (imageData) {
+                newUserPart.parts.push({ inlineData: { mimeType: "image/jpeg", data: imageData } });
+            }
+
+            // Append new request to history payload
+            let contents = [...chatHistory, newUserPart];
+
             try {
-                // Safest possible payload structure, no config blocks to cause formatting crashes
                 let payload = JSON.stringify({ contents: contents });
                 let response;
                 
@@ -483,7 +507,7 @@
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
                 
-                // Aggressive Cleanup: Remove markdown if AI adds it.
+                // Aggressive Cleanup
                 text = text.replace(/```json/g, '').replace(/```/g, '').trim();
                 const jsonMatch = text.match(/\{[\s\S]*\}/);
                 
@@ -494,17 +518,19 @@
                 }
                 
                 const result = JSON.parse(text);
+                
+                // Update history with successful turn
+                chatHistory.push(newUserPart);
+                chatHistory.push({ role: "model", parts: [{ text: text }] });
+
                 displayResult(result);
                 return result;
 
             } catch (err) {
-                resultContent.innerHTML = `
-                    <div class="bg-red-50 p-4 border-2 border-red-300 rounded-xl mb-4 text-dark">
+                resultContent.innerHTML += `
+                    <div class="bg-red-50 p-4 border-2 border-red-300 rounded-xl mb-4 mt-4 text-dark">
                         <p class="text-xl font-bold mb-2 text-red-700">Connection failed.</p>
                         <p class="mb-2 text-sm italic">${err.message}</p>
-                        <p class="text-sm font-bold mt-2 border-t pt-2 border-red-200">
-                            Please go to Settings, tap "Search Models", select an available model from the list, and Save.
-                        </p>
                     </div>
                 `;
                 console.error(err);
@@ -514,10 +540,11 @@
         }
 
         function displayResult(result) {
-            currentResult = result;
             const resultContent = document.getElementById('result-content');
             
             if (result.foodName) {
+                // Initial Recipe Result
+                currentResult = result;
                 resultContent.innerHTML = `
                     <h3 class="text-3xl font-bold mb-2">${result.foodName}</h3>
                     <div class="bg-amber-100 p-4 rounded-xl border-2 border-black mb-4">
@@ -525,21 +552,40 @@
                         <p><strong>Temperature:</strong> ${result.temperature}°Celsius</p>
                         <p><strong>Time:</strong> ${result.time}</p>
                     </div>
-                    <p class="mb-2"><strong>How to cook it:</strong></p>
-                    <p>${result.instructions}</p>
+                    <p class="mb-2 font-bold text-xl border-b-2 border-gray-200 pb-2">How to cook it:</p>
+                    <div class="mb-6">${formatInstructions(result.instructions)}</div>
                 `;
                 document.getElementById('save-btn').classList.remove('hidden');
             } else {
-                resultContent.innerHTML = `
-                    <div class="bg-blue-50 p-4 rounded-xl border-2 border-blue-300 mb-4 mt-4">
-                        <p class="text-lg italic mb-2">Nana's Answer:</p>
-                        <p class="font-bold mb-2">${result.responseText || 'Here is what I found:'}</p>
-                        ${result.instructions ? `<p>${result.instructions}</p>` : ''}
+                // Follow-up Answer Result
+                resultContent.innerHTML += `
+                    <div class="bg-blue-50 p-4 rounded-xl border-2 border-blue-300 mb-4 mt-6">
+                        <p class="text-lg font-bold mb-2 text-blue-800">Nana's Answer:</p>
+                        <p class="text-lg mb-3">${result.responseText || 'Here is what I found:'}</p>
+                        ${result.instructions && result.instructions.length > 0 ? `<div class="mt-3 border-t border-blue-200 pt-3">${formatInstructions(result.instructions)}</div>` : ''}
                     </div>
                 `;
             }
             
-            resultContent.scrollIntoView({ behavior: 'smooth' });
+            document.getElementById('follow-up-area').classList.remove('hidden');
+            resultContent.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }
+
+        async function askFollowUp() {
+            const input = document.getElementById('follow-up-input');
+            const question = input ? input.value.trim() : "";
+            if (!question) return;
+            input.value = ""; // clear input
+            
+            // Optionally add user's question to the UI right away so they know it sent
+            const resultContent = document.getElementById('result-content');
+            resultContent.innerHTML += `
+                <div class="bg-gray-100 p-3 rounded-xl border-2 border-gray-300 mb-2 mt-4 text-right ml-8">
+                    <p class="italic text-gray-700">You asked: ${question}</p>
+                </div>
+            `;
+            
+            await callGemini(`Follow-up question from user: ${question}`);
         }
 
         async function handleImageUpload(event) {
@@ -550,6 +596,7 @@
             reader.onload = async (e) => {
                 const base64 = e.target.result.split(',')[1];
                 const prompt = "Identify this food in the photo and give Ninja CRISPi settings (Mode, Temp in C, Time).";
+                resetApp(false);
                 await callGemini(prompt, base64);
             };
             reader.readAsDataURL(file);
@@ -562,7 +609,27 @@
                 return;
             }
             const prompt = `I have these ingredients: ${input}. Suggest a simple British meal I can cook in my Ninja CRISPi.`;
+            resetApp(false);
             await callGemini(prompt);
+        }
+
+        function resetApp(hideArea = true) {
+            chatHistory = []; 
+            currentResult = null;
+            const ingredientInput = document.getElementById('ingredient-input');
+            const followUpInput = document.getElementById('follow-up-input');
+            const resultContent = document.getElementById('result-content');
+            const followUpArea = document.getElementById('follow-up-area');
+            
+            if (ingredientInput) ingredientInput.value = "";
+            if (followUpInput) followUpInput.value = "";
+            if (resultContent) resultContent.innerHTML = "";
+            if (followUpArea) followUpArea.classList.add('hidden');
+            if (hideArea) {
+                const resultArea = document.getElementById('result-area');
+                if (resultArea) resultArea.classList.add('hidden');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
         }
 
         function saveToFavourites() {
@@ -592,7 +659,7 @@
                     <button onclick="deleteFavourite(${f.id})" class="absolute top-2 right-2 text-2xl p-2">🗑️</button>
                     <h3 class="text-2xl font-bold mb-2">${f.foodName}</h3>
                     <p class="text-sm border-b pb-2 mb-2">${f.mode} | ${f.temperature}°C | ${f.time}</p>
-                    <p class="text-lg">${f.instructions}</p>
+                    <div class="mt-2">${formatInstructions(f.instructions)}</div>
                 </div>
             `).join('');
         }
