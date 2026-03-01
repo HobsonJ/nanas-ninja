@@ -354,10 +354,17 @@
             resultArea.classList.remove('hidden');
             loader.classList.remove('hidden');
             resultContent.innerHTML = "";
-            document.getElementById('save-btn').classList.add('hidden');
+            const saveBtn = document.getElementById('save-btn');
+            if (saveBtn) saveBtn.classList.add('hidden');
 
-            const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temps in Celsius. Return ONLY a raw JSON object with keys: foodName, mode, temperature, time, and instructions. Do not use markdown formatting like ```json.";
+            const isCanvasPreview = window.location.hostname.includes('goog') || window.location.hostname === '';
             
+            // We use v1beta as the baseline because it allows the model-discovery request.
+            let targetModel = isCanvasPreview ? "models/gemini-2.5-flash-preview-09-2025" : "models/gemini-1.5-flash";
+            let url = `https://generativelanguage.googleapis.com/v1beta/${targetModel}:generateContent?key=${apiKey}`;
+            
+            // Inject Persona Directly
+            const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temps in Celsius. Return ONLY a raw JSON object with keys: foodName, mode, temperature, time, and instructions. Do not use markdown formatting like ```json.";
             let finalPrompt = `[SYSTEM INSTRUCTIONS: ${systemPrompt}]\n\nUser Request: ${prompt}`;
 
             let contents = [];
@@ -372,65 +379,80 @@
                 contents = [{ parts: [{ text: finalPrompt }] }];
             }
 
-            // CASCADE FALLBACK: Try robust, widely accessible models
-            const modelsToTry = [
-                'gemini-1.5-flash',
-                'gemini-1.5-flash-8b'
-            ];
+            try {
+                let payload = JSON.stringify({ contents: contents });
+                let response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: payload
+                });
 
-            let success = false;
-            let lastErrorMessage = "Unknown error";
-            let resultData = null;
-
-            for (const model of modelsToTry) {
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-                
-                try {
-                    // PURE PAYLOAD: No generationConfig or systemInstruction to prevent formatting errors
-                    const response = await fetch(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ contents: contents })
-                    });
-
-                    if (response.ok) {
-                        const data = await response.json();
-                        let text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                // --- AUTO-DISCOVERY FALLBACK ---
+                // If the key rejects the model, we actively ask Google AI what models your specific key CAN use!
+                if (response.status === 404 || response.status === 400) {
+                    console.log("Model blocked. Asking Google for permitted models...");
+                    const modelsResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+                    
+                    if (modelsResponse.ok) {
+                        const modelsData = await modelsResponse.json();
+                        // Find models that support generateContent
+                        const validModels = modelsData.models.filter(m => 
+                            m.supportedGenerationMethods && 
+                            m.supportedGenerationMethods.includes('generateContent') &&
+                            m.name.includes('gemini')
+                        );
                         
-                        text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-                        const jsonMatch = text.match(/\{[\s\S]*\}/);
-                        
-                        if (jsonMatch) {
-                            resultData = JSON.parse(jsonMatch[0]);
-                            success = true;
-                            break; // Success! Break the loop.
-                        } else {
-                            lastErrorMessage = "The AI answered, but the recipe format was unreadable.";
+                        if (validModels.length > 0) {
+                            const fallbackModel = validModels[0].name; // Grabs the first permitted model
+                            console.log("Found permitted model:", fallbackModel);
+                            
+                            url = `https://generativelanguage.googleapis.com/v1beta/${fallbackModel}:generateContent?key=${apiKey}`;
+                            response = await fetch(url, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: payload
+                            });
                         }
-                    } else {
-                        const errData = await response.json().catch(() => ({}));
-                        lastErrorMessage = errData.error?.message || `Status ${response.status} with ${model}`;
                     }
-                } catch (e) {
-                    lastErrorMessage = e.message;
                 }
-            }
 
-            loader.classList.add('hidden');
+                if (!response || !response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    console.error("API Error Payload:", errData);
+                    throw new Error(errData.error?.message || `Status ${response?.status}`);
+                }
+                
+                const data = await response.json();
+                let text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                
+                // Aggressive Cleanup: Remove markdown if AI adds it.
+                text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                const jsonMatch = text.match(/\{[\s\S]*\}/);
+                
+                if (jsonMatch) {
+                    text = jsonMatch[0];
+                } else {
+                    throw new Error("Could not find recipe data in the AI's response.");
+                }
+                
+                const result = JSON.parse(text);
+                displayResult(result);
+                return result;
 
-            if (success && resultData) {
-                displayResult(resultData);
-            } else {
-                // EXPLICIT DIAGNOSTIC ERROR
+            } catch (err) {
+                // If this fails, the API key truly has zero active generation permissions.
                 resultContent.innerHTML = `
                     <div class="bg-red-50 p-4 border-2 border-red-300 rounded-xl mb-4 text-dark">
                         <p class="text-xl font-bold mb-2 text-red-700">Nana, the connection failed.</p>
-                        <p class="mb-2 text-sm italic">${lastErrorMessage}</p>
+                        <p class="mb-2 text-sm italic">${err.message}</p>
                         <p class="text-sm font-bold mt-2 border-t pt-2 border-red-200">
-                            If this persists, your Google API key is locked. Note: Google AI Studio now requires a Billing Account to be linked for UK/EU keys to access these models (even on the free tier). Please check your AI Studio settings or generate a new key.
+                            Your API Key seems completely restricted. Check Google AI Studio to ensure your account has access to these models (a linked billing account may now be required in the UK).
                         </p>
                     </div>
                 `;
+                console.error(err);
+            } finally {
+                loader.classList.add('hidden');
             }
         }
 
@@ -470,7 +492,7 @@
             const reader = new FileReader();
             reader.onload = async (e) => {
                 const base64 = e.target.result.split(',')[1];
-                const prompt = "Identify this food and give Ninja CRISPi settings (Mode, Temp in C, Time). Use simple British English.";
+                const prompt = "Identify this food in the photo and give Ninja CRISPi settings (Mode, Temp in C, Time).";
                 await callGemini(prompt, base64);
             };
             reader.readAsDataURL(file);
