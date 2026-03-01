@@ -396,15 +396,15 @@
             if (saveBtn) saveBtn.classList.add('hidden');
 
             // --- THE STABILITY FIX ---
-            // If we are on your GitHub site (isCanvasPreview is false), use the stable 'v1' endpoint.
+            // If we are on your GitHub site or have a personal key, use the stable 'v1' endpoint.
             // Personal free-tier keys are often rejected by the 'v1beta' endpoint for Flash 1.5.
-            const usePreviewModel = isCanvasPreview && !hasSavedKey;
-            const apiVersion = usePreviewModel ? "v1beta" : "v1";
-            const modelName = usePreviewModel ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
+            const isPlatformPreview = isCanvasPreview && !hasSavedKey;
+            const apiVersion = isPlatformPreview ? "v1beta" : "v1";
+            const modelName = isPlatformPreview ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
             
             const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${currentKey}`;
             
-            const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temperatures in Celsius. For recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up, return a JSON object with keys: responseText and instructions. Only return raw JSON.";
+            const systemPrompt = "You are 'Nana', an elderly British lady and Ninja assistant. You know about Ninja CRISPi, Ninja Pot (OL650UK), Air Fryer (AF451UK), Slushy Machine (FS301UK), and Pizza Oven (OO101UK). Give instructions in simple British English with temps in Celsius. Reply strictly with raw JSON containing: foodName, mode, temperature, time, and instructions. For follow-up, use responseText and instructions. Only return raw JSON.";
 
             // Universal History Method: Move instructions into history to bypass field errors on v1.
             if (chatHistory.length === 0) {
