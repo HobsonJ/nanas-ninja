@@ -138,6 +138,9 @@
             <button onclick="toggleTextSize()" class="btn-massive flex-1 py-3 text-xl">
                 Aa Text Size
             </button>
+            <button onclick="showPage('help')" class="btn-massive w-16 py-3 text-xl" aria-label="Help">
+                ❓
+            </button>
             <button id="settings-cog" onclick="showPage('settings')" class="btn-massive w-16 hidden py-3 text-xl">
                 ⚙️
             </button>
@@ -153,7 +156,8 @@
                 <!-- Greeting Card (Hidden when chat starts) -->
                 <div id="greeting-card" class="card bg-amber-50">
                     <h2 class="text-3xl font-bold mb-4">What's for Tea?</h2>
-                    <p class="mb-2 text-xl">Type what you want to cook below, or tap the camera to show me a photo!</p>
+                    <p class="mb-2 text-xl">Type a recipe below, or just tell me what ingredients you have and I'll come up with an idea for you!</p>
+                    <p class="mb-2 text-xl">Not sure what it is or how to cook it? Tap the camera to show me a photo!</p>
                     <p class="text-lg italic text-gray-600 bg-white p-3 rounded-lg border-2 border-gray-200 mt-4">
                         <strong>Nana's Tip:</strong> Include quantities (e.g. "3 sausages") so I can give you better timings.
                     </p>
@@ -163,6 +167,9 @@
                 <div id="recipe-of-the-day-card" class="card">
                     <h2 class="text-3xl font-bold mb-4">Recipe of the Day</h2>
                     <div id="recipe-of-the-day-content"></div>
+                    <button onclick="randomiseRecipe()" class="btn-massive mt-4 bg-purple-100 py-3 text-xl text-purple-900 border-purple-300">
+                        🎲 Show Me Another
+                    </button>
                 </div>
                 
                 <!-- Chat messages and results will be injected here -->
@@ -171,7 +178,7 @@
             <!-- Sticky Bottom Input Area -->
             <div class="fixed bottom-[60px] left-1/2 -translate-x-1/2 w-full max-w-2xl bg-gray-100 p-4 border-t-4 border-black z-40 pb-6 shadow-[0_-15px_25px_rgba(0,0,0,0.1)]">
                 <div class="flex flex-col gap-3">
-                    <textarea id="main-input" placeholder="Type a recipe or follow-up question here..." rows="2" class="text-xl"></textarea>
+                    <textarea id="main-input" placeholder="Type a recipe, ingredients, or a question here..." rows="2" class="text-xl"></textarea>
                     
                     <div class="flex gap-2">
                         <button onclick="handleUserSubmit()" class="btn-massive bg-green-200 flex-1 py-4 text-2xl">
@@ -194,6 +201,40 @@
                 </div>
             </div>
             
+        </section>
+
+        <!-- HELP PAGE -->
+        <section id="page-help" class="hidden">
+            <h2 class="text-4xl font-black mb-6">How to use Nana's Ninja</h2>
+            
+            <div class="card bg-blue-50">
+                <h3 class="text-2xl font-bold mb-2">1. Ask for a Recipe</h3>
+                <p class="mb-2">Use the typing box at the bottom of the Home screen to tell me what you want to cook. For example, type <em>"How do I cook a chicken breast?"</em>.</p>
+            </div>
+
+            <div class="card bg-green-50">
+                <h3 class="text-2xl font-bold mb-2">2. Use What You Have</h3>
+                <p class="mb-2">Not sure what to make? Just list the ingredients you have in the fridge or cupboard, like <em>"I have chicken, potatoes, and carrots."</em> and I'll suggest a meal.</p>
+            </div>
+
+            <div class="card bg-amber-50">
+                <h3 class="text-2xl font-bold mb-2">3. The Magic Camera</h3>
+                <p class="mb-2">Tap the 📸 button to take a photo of some food. I'll look at it and tell you exactly what settings to use on your Ninja to cook it perfectly.</p>
+            </div>
+
+            <div class="card bg-purple-50">
+                <h3 class="text-2xl font-bold mb-2">4. Follow-up Questions</h3>
+                <p class="mb-2">After I give you a recipe, you can use the same typing box to ask more questions about it, like <em>"Can I cook this from frozen?"</em> or <em>"What if I want it extra crispy?"</em>.</p>
+            </div>
+
+            <div class="card bg-pink-50">
+                <h3 class="text-2xl font-bold mb-2">5. The Favourites Tin</h3>
+                <p class="mb-2">If you like a recipe, tap the ⭐ button to save it. You can find all your saved recipes later by tapping 'Tin' at the bottom of the screen.</p>
+            </div>
+
+            <button onclick="showPage('home')" class="btn-massive mt-4 bg-blue-100">
+                Back to Home
+            </button>
         </section>
 
         <!-- FAVOURITES PAGE -->
@@ -332,10 +373,12 @@
         }
 
         function showPage(pageId) {
-            ['home', 'favourites', 'guide', 'settings'].forEach(id => {
-                document.getElementById(`page-${id}`).classList.add('hidden');
+            ['home', 'help', 'favourites', 'guide', 'settings'].forEach(id => {
+                const el = document.getElementById(`page-${id}`);
+                if(el) el.classList.add('hidden');
             });
-            document.getElementById(`page-${pageId}`).classList.remove('hidden');
+            const activePage = document.getElementById(`page-${pageId}`);
+            if(activePage) activePage.classList.remove('hidden');
             window.scrollTo(0,0);
         }
 
@@ -424,6 +467,10 @@
         function loadRecipeOfDay() {
             const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
             const recipe = britishClassics[dayOfYear % britishClassics.length];
+            renderRecipeOfDay(recipe);
+        }
+
+        function renderRecipeOfDay(recipe) {
             const container = document.getElementById('recipe-of-the-day-content');
             if (container) {
                 container.innerHTML = `
@@ -434,6 +481,18 @@
                     <div class="mt-4 border-t-2 border-gray-100 pt-4">${formatInstructions(recipe.instructions)}</div>
                 `;
             }
+        }
+
+        function randomiseRecipe() {
+            let newRecipe;
+            const currentName = document.querySelector('#recipe-of-the-day-content h3')?.innerText;
+            
+            // Pick a random recipe, ensuring it's different from the current one
+            do {
+                newRecipe = britishClassics[Math.floor(Math.random() * britishClassics.length)];
+            } while (britishClassics.length > 1 && newRecipe.name === currentName);
+            
+            renderRecipeOfDay(newRecipe);
         }
 
         // --- CHAT UI LOGIC ---
@@ -479,7 +538,7 @@
             appendUserMessage(text);
             
             if (chatHistory.length === 0) {
-                await callGemini(`I want to cook this: ${text}. Suggest a simple British meal I can cook in my Ninja CRISPi.`);
+                await callGemini(`I want to cook this or use these ingredients: ${text}. Suggest a simple British meal I can cook in my Ninja CRISPi.`);
             } else {
                 await callGemini(`Follow-up question from user: ${text}`);
             }
@@ -680,7 +739,7 @@
 
         function showMessage(msg) {
             const div = document.createElement('div');
-            div.className = "fixed top-10 left-1/2 -translate-x-1/2 bg-black text-white px-8 py-4 rounded-full font-bold shadow-2xl z-[100] text-center w-64";
+            div.className = "fixed top-10 left-1/2 -translate-x-1/2 bg-black text-white px-8 py-4 rounded-full font-bold shadow-2xl z-[100] text-center w-64 z-[9999]";
             div.textContent = msg;
             document.body.appendChild(div);
             setTimeout(() => div.remove(), 2500);
