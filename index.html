@@ -296,11 +296,12 @@
             const setupKey = urlParams.get('setup');
             
             if (setupKey) {
-                localStorage.setItem('ninja_api_key', setupKey.trim());
+                const cleanKey = setupKey.trim();
+                localStorage.setItem('ninja_api_key', cleanKey);
                 window.history.replaceState({}, document.title, window.location.pathname);
                 showMessage("Nana's Ninja is Ready! 🪄");
                 const keyInput = document.getElementById('api-key-input');
-                if (keyInput) keyInput.value = setupKey.trim();
+                if (keyInput) keyInput.value = cleanKey;
             }
 
             loadRecipeOfDay();
@@ -373,9 +374,9 @@
             const currentKey = getApiKey();
             const isCanvasPreview = window.location.hostname.includes('goog') || window.location.hostname === '';
             
-            // In Canvas preview, the environment provides the key if apiKey is empty.
-            // On GitHub, the key MUST be provided.
-            const activeKey = (isCanvasPreview && !currentKey) ? "" : currentKey;
+            // Environment key logic: If we are in Canvas preview, we must use the specific preview model.
+            // If the user has NOT provided their own key yet, the environment will provide one if the key param is empty.
+            const activeKey = currentKey; 
 
             if (!activeKey && !isCanvasPreview) {
                 showMessage("I need setting up! Tap my face 5 times.");
@@ -392,8 +393,9 @@
             const saveBtn = document.getElementById('save-btn');
             if (saveBtn) saveBtn.classList.add('hidden');
 
-            // Correct model for this environment.
-            const modelName = "gemini-2.5-flash-preview-09-2025";
+            // CRITICAL FIX: The preview environment ONLY supports gemini-2.5-flash-preview-09-2025 in v1beta.
+            // When running on GitHub with a personal key, gemini-1.5-flash is preferred.
+            const modelName = isCanvasPreview ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${activeKey}`;
             
             let userParts = [{ text: newPrompt }];
@@ -407,6 +409,7 @@
 
             try {
                 let response;
+                // Exponential backoff retry logic
                 for (let i = 0; i < 5; i++) {
                     try {
                         response = await fetch(url, {
@@ -432,6 +435,7 @@
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
+                // Sanitize JSON response strings
                 text = text.replace(/```json/g, '').replace(/```/g, '').trim();
                 const result = JSON.parse(text);
                 
