@@ -275,7 +275,7 @@
 
     <script>
         // Use empty string to allow environment auto-injection in preview
-        const apiKey = localStorage.getItem('ninja_api_key') || "";
+        let apiKey = localStorage.getItem('ninja_api_key') || "";
         let currentResult = null;
         let isLargeText = false;
         let favourites = JSON.parse(localStorage.getItem('ninja_favourites') || "[]");
@@ -369,7 +369,8 @@
             loader.classList.remove('hidden');
             document.getElementById('save-btn').classList.add('hidden');
 
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            // Use the stable gemini-1.5-flash model for reliability on all devices
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
             
             let userParts = [{ text: newPrompt }];
             if (imageData) {
@@ -398,12 +399,16 @@
                     await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
                 }
 
-                if (!response || !response.ok) throw new Error("API failed");
+                if (!response || !response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    console.error("Gemini API Error Response:", errData);
+                    throw new Error(errData.error?.message || "API failed");
+                }
                 
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
-                // Sanitize JSON response (remove markdown markers if present)
+                // Sanitize JSON response
                 text = text.replace(/```json/g, '').replace(/```/g, '').trim();
                 const result = JSON.parse(text);
                 
@@ -414,8 +419,8 @@
                 return result;
 
             } catch (err) {
-                console.error("Gemini API Error:", err);
-                resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. Please check your internet or the API key in settings.</p>`;
+                console.error("Final Connection Error:", err);
+                resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. Please check your internet or the API key link I sent you.</p>`;
             } finally {
                 loader.classList.add('hidden');
             }
