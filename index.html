@@ -272,7 +272,7 @@
     </nav>
 
     <script>
-        // Platform auto-injection string
+        // Use an empty string for platform injection check
         const apiKeyEnv = "";
 
         function getEffectiveKey() {
@@ -391,10 +391,11 @@
             const saveBtn = document.getElementById('save-btn');
             if (saveBtn) saveBtn.classList.add('hidden');
 
-            // CRITICAL: Preview environment ONLY supports gemini-2.5-flash-preview-09-2025.
-            // External site with standard key uses GA gemini-1.5-flash.
-            const modelName = isCanvasPreview ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
-            const apiVersion = isCanvasPreview ? "v1beta" : "v1";
+            // CRITICAL FIX: Always use v1beta for both environments to ensure 
+            // camelCase support for systemInstruction and responseMimeType.
+            // This prevents "Unknown name system instruction" errors on mobile.
+            const apiVersion = "v1beta"; 
+            const modelName = (isCanvasPreview && !hasSavedKey) ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
             
             const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${currentKey}`;
             
@@ -405,22 +406,20 @@
             
             chatHistory.push({ role: "user", parts: userParts });
 
-            // PERSONA REVERTED: Now strictly advice for Ninja CRISPi
             const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temperatures in Celsius. For recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up, return a JSON object with keys: responseText and instructions. Only return raw JSON.";
 
             try {
-                let payload = { contents: chatHistory };
-                
-                // Fields vary slightly between v1 and v1beta REST endpoints
-                if (apiVersion === "v1beta") {
-                    payload.systemInstruction = { parts: [{ text: systemPrompt }] };
-                    payload.generationConfig = { responseMimeType: "application/json" };
-                } else {
-                    payload.system_instruction = { parts: [{ text: systemPrompt }] };
-                    payload.generation_config = { response_mime_type: "application/json" };
-                }
+                // Construct payload using standard v1beta camelCase field names
+                let payload = {
+                    contents: chatHistory,
+                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                    generationConfig: { 
+                        responseMimeType: "application/json" 
+                    }
+                };
 
                 let response;
+                // Exponential backoff retry logic
                 for (let i = 0; i < 5; i++) {
                     try {
                         response = await fetch(url, {
@@ -435,12 +434,14 @@
 
                 if (!response || !response.ok) {
                     const errData = await response.json().catch(() => ({}));
+                    console.error("Gemini API Error Response:", errData);
                     throw new Error(errData.error?.message || `Status ${response?.status}`);
                 }
                 
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
+                // Sanitize JSON response strings
                 text = text.replace(/```json/g, '').replace(/```/g, '').trim();
                 const result = JSON.parse(text);
                 
@@ -451,7 +452,7 @@
                 return result;
 
             } catch (err) {
-                console.error("Gemini Error:", err);
+                console.error("Final Connection Error:", err);
                 if (resultContent) {
                     resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. (Error: ${err.message}). Please check the setup link I sent you.</p>`;
                 }
