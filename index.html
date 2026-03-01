@@ -273,15 +273,14 @@
     </nav>
 
     <script>
-        // Global variables at the top to prevent ReferenceErrors
-        let tapCount = 0;
-        let tapTimer = null;
+        // Use window properties for global state to prevent ReferenceErrors
+        window.tapCount = 0;
+        window.tapTimer = null;
         let isLargeText = false;
         let favourites = JSON.parse(localStorage.getItem('ninja_favourites') || "[]");
         let chatHistory = []; 
         let currentResult = null;
 
-        // Platform auto-injection check
         const apiKeyEnv = "";
 
         function getEffectiveKey() {
@@ -319,16 +318,16 @@
         };
 
         function handleSecretTap() {
-            tapCount++;
-            clearTimeout(tapTimer);
-            tapTimer = setTimeout(() => { tapCount = 0; }, 1000);
-            if (tapCount >= 5) {
+            window.tapCount++;
+            clearTimeout(window.tapTimer);
+            window.tapTimer = setTimeout(() => { window.tapCount = 0; }, 1000);
+            if (window.tapCount >= 5) {
                 const cog = document.getElementById('settings-cog');
                 if (cog) {
                     cog.classList.toggle('hidden');
                     showMessage(cog.classList.contains('hidden') ? "Settings Hidden" : "Settings Revealed! ⚙️");
                 }
-                tapCount = 0;
+                window.tapCount = 0;
             }
         }
 
@@ -395,24 +394,19 @@
             const saveBtn = document.getElementById('save-btn');
             if (saveBtn) saveBtn.classList.add('hidden');
 
-            // --- UNIVERSAL FIX ---
-            // 1. Put the system instructions directly into the history to avoid "Unknown name" errors on mobile.
-            // 2. Use v1beta for everyone to ensure "responseMimeType" works.
+            // --- THE STABILITY FIX ---
+            // Live Site (GitHub) uses stable v1 with gemini-1.5-flash.
+            // Canvas uses v1beta with the preview model.
+            const apiVersion = (isCanvasPreview && !hasSavedKey) ? "v1beta" : "v1";
             const modelName = (isCanvasPreview && !hasSavedKey) ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${currentKey}`;
             
-            const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temperatures in Celsius. For recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up, return a JSON object with keys: responseText and instructions. Only return raw JSON.";
-
-            // Method: Conversation Injection (Universal Compatibility)
+            const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${currentKey}`;
+            
+            // CONVERSATION INJECTION: Bypass all 'systemInstruction' field errors.
             if (chatHistory.length === 0) {
-                chatHistory.push({
-                    role: "user",
-                    parts: [{ text: "SYSTEM INSTRUCTIONS: " + systemPrompt }]
-                });
-                chatHistory.push({
-                    role: "model",
-                    parts: [{ text: "Understood. I will strictly act as Nana's Ninja assistant and output JSON data." }]
-                });
+                const instructions = "You are 'Nana', an elderly British lady and Ninja CRISPi assistant. Use UK English. Give temps in Celsius. Reply ONLY with a raw JSON object containing: foodName, mode, temperature, time, and instructions. For chats, use responseText and instructions.";
+                chatHistory.push({ role: "user", parts: [{ text: "System Instructions: " + instructions }] });
+                chatHistory.push({ role: "model", parts: [{ text: "Understood. Nana is ready to help." }] });
             }
 
             let userParts = [{ text: newPrompt }];
@@ -423,16 +417,10 @@
             chatHistory.push({ role: "user", parts: userParts });
 
             try {
-                // Minimal payload to prevent device crashes
-                let payload = {
-                    contents: chatHistory,
-                    generationConfig: { 
-                        responseMimeType: "application/json" 
-                    }
-                };
+                // Simplified payload compatible with both v1 and v1beta
+                let payload = { contents: chatHistory };
 
                 let response;
-                // Exponential backoff retry logic
                 for (let i = 0; i < 5; i++) {
                     try {
                         response = await fetch(url, {
@@ -447,17 +435,19 @@
 
                 if (!response || !response.ok) {
                     const errData = await response.json().catch(() => ({}));
-                    console.error("Gemini API Error Response:", errData);
                     throw new Error(errData.error?.message || `Status ${response?.status}`);
                 }
                 
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
-                // Sanitize JSON response strings
-                text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-                const result = JSON.parse(text);
+                // Sanitize output (Extract JSON block if text is present around it)
+                const jsonMatch = text.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    text = jsonMatch[0];
+                }
                 
+                const result = JSON.parse(text);
                 chatHistory.push({ role: "model", parts: [{ text: text }] });
                 
                 displayResult(result);
@@ -465,9 +455,9 @@
                 return result;
 
             } catch (err) {
-                console.error("Final Connection Error:", err);
+                console.error("Connection Error:", err);
                 if (resultContent) {
-                    resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. (Error: ${err.message}). Please check the setup link I sent you.</p>`;
+                    resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. (Error: ${err.message}). Please check the link I sent you.</p>`;
                 }
             } finally {
                 if (loader) loader.classList.add('hidden');
@@ -512,7 +502,7 @@
             const question = input ? input.value.trim() : "";
             if (!question) return;
             input.value = "";
-            await callGemini(`Nana asks a follow-up: ${question}`);
+            await callGemini(`Nana asks: ${question}`);
         }
 
         async function handleImageUpload(event) {
@@ -522,7 +512,7 @@
             reader.onload = async (e) => {
                 const base64 = e.target.result.split(',')[1];
                 resetApp(false); 
-                await callGemini("Identify this food in the photo and give Ninja CRISPi settings (Mode, Temp in C, Time).", base64);
+                await callGemini("Identify this food and give Ninja CRISPi settings (Mode, Temp, Time).", base64);
             };
             reader.readAsDataURL(file);
         }
@@ -535,7 +525,7 @@
                 return;
             }
             resetApp(false); 
-            await callGemini(`I have these ingredients: ${ingredients}. Suggest a simple British meal I can cook in my Ninja CRISPi.`);
+            await callGemini(`I have these ingredients: ${ingredients}. Suggest a meal for my Ninja CRISPi.`);
         }
 
         function resetApp(hideArea = true) {
