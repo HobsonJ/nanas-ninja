@@ -272,7 +272,7 @@
     </nav>
 
     <script>
-        // Use an empty string for platform injection
+        // Platform auto-injection string
         const apiKeyEnv = "";
 
         function getEffectiveKey() {
@@ -391,11 +391,12 @@
             const saveBtn = document.getElementById('save-btn');
             if (saveBtn) saveBtn.classList.add('hidden');
 
-            // MODEL LOGIC:
-            // For live site (hasSavedKey or external hostname), use stable 1.5-flash.
-            // For preview environment (goog hostname, no saved key), use the preview model.
-            const modelName = (isCanvasPreview && !hasSavedKey) ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${currentKey}`;
+            // CRITICAL: Preview environment ONLY supports gemini-2.5-flash-preview-09-2025.
+            // External site with standard key uses GA gemini-1.5-flash.
+            const modelName = isCanvasPreview ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
+            const apiVersion = isCanvasPreview ? "v1beta" : "v1";
+            
+            const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${currentKey}`;
             
             let userParts = [{ text: newPrompt }];
             if (imageData) {
@@ -404,14 +405,20 @@
             
             chatHistory.push({ role: "user", parts: userParts });
 
-            const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using Ninja CRISPi cookers (Air Fryer, Ninja Pot, Pizza Oven). Give instructions in simple British English with temperatures in Celsius. For recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up, return a JSON object with keys: responseText and instructions. Only return JSON.";
+            // PERSONA REVERTED: Now strictly advice for Ninja CRISPi
+            const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temperatures in Celsius. For recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up, return a JSON object with keys: responseText and instructions. Only return raw JSON.";
 
             try {
-                let payload = {
-                    contents: chatHistory,
-                    systemInstruction: { parts: [{ text: systemPrompt }] },
-                    generationConfig: { responseMimeType: "application/json" }
-                };
+                let payload = { contents: chatHistory };
+                
+                // Fields vary slightly between v1 and v1beta REST endpoints
+                if (apiVersion === "v1beta") {
+                    payload.systemInstruction = { parts: [{ text: systemPrompt }] };
+                    payload.generationConfig = { responseMimeType: "application/json" };
+                } else {
+                    payload.system_instruction = { parts: [{ text: systemPrompt }] };
+                    payload.generation_config = { response_mime_type: "application/json" };
+                }
 
                 let response;
                 for (let i = 0; i < 5; i++) {
@@ -462,7 +469,7 @@
                 resultContent.innerHTML = `
                     <h3 class="text-3xl font-bold mb-2">${result.foodName}</h3>
                     <div class="bg-amber-100 p-4 rounded-xl border-2 border-black mb-4">
-                        <p><strong>Ninja Setting:</strong> ${result.mode}</p>
+                        <p><strong>Ninja CRISPi Setting:</strong> ${result.mode}</p>
                         <p><strong>Temperature:</strong> ${result.temperature}°Celsius</p>
                         <p><strong>Time:</strong> ${result.time}</p>
                     </div>
@@ -501,7 +508,7 @@
             reader.onload = async (e) => {
                 const base64 = e.target.result.split(',')[1];
                 resetApp(false); 
-                await callGemini("Identify this food in the photo and give Ninja settings (Mode, Temp in C, Time).", base64);
+                await callGemini("Identify this food in the photo and give Ninja CRISPi settings (Mode, Temp in C, Time).", base64);
             };
             reader.readAsDataURL(file);
         }
@@ -514,7 +521,7 @@
                 return;
             }
             resetApp(false); 
-            await callGemini(`I have these ingredients: ${ingredients}. Suggest a simple British meal I can cook in my Ninja.`);
+            await callGemini(`I have these ingredients: ${ingredients}. Suggest a simple British meal I can cook in my Ninja CRISPi.`);
         }
 
         function resetApp(hideArea = true) {
