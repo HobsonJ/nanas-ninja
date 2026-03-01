@@ -428,13 +428,11 @@
             try {
                 let payload = { contents: chatHistory };
                 
-                // Adjust naming and config based on API version detected
+                // Adjust naming and config based on API version detected.
+                // CRITICAL: Stable v1 endpoint often rejects responseMimeType in generation_config.
+                // Since we use a robust regex cleaner below, we remove it from v1 to prevent crashes.
                 if (apiVersion === "v1beta") {
-                    // v1beta uses camelCase
                     payload.generationConfig = { responseMimeType: "application/json" };
-                } else {
-                    // v1 uses snake_case for standard keys
-                    payload.generation_config = { response_mime_type: "application/json" };
                 }
 
                 let response;
@@ -460,7 +458,7 @@
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
-                // Clean the text to ensure pure JSON is parsed
+                // Clean the text to ensure pure JSON is parsed (Essential for v1 which might add markdown)
                 const jsonMatch = text.match(/\{[\s\S]*\}/);
                 if (jsonMatch) text = jsonMatch[0];
                 
