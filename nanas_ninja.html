@@ -129,9 +129,12 @@
             </div>
         </div>
 
-        <div class="w-full max-w-md">
-            <button onclick="toggleTextSize()" class="btn-massive bg-white" style="padding: 12px; font-size: 20px;">
-                Aa Make Text Bigger
+        <div class="flex gap-2 w-full max-w-md">
+            <button onclick="toggleTextSize()" class="btn-massive flex-1" style="padding: 12px; font-size: 20px;">
+                Aa Text Size
+            </button>
+            <button onclick="showPage('settings')" class="btn-massive w-16" style="padding: 12px; width: 80px;">
+                ⚙️
             </button>
         </div>
     </header>
@@ -225,6 +228,21 @@
             <p class="mt-4 italic text-lg text-center">Note: Always check that meat is piping hot!</p>
         </section>
 
+        <!-- SETTINGS PAGE (Required for GitHub) -->
+        <section id="page-settings" class="hidden">
+            <h2 class="text-4xl font-black mb-6">App Settings</h2>
+            <div class="card">
+                <p class="mb-4">This key lets the camera work. You only need to save it once.</p>
+                <input type="password" id="api-key-input" placeholder="Paste Key Here...">
+                <button onclick="saveApiKey()" class="btn-massive mt-4 bg-blue-100">
+                    Save Key
+                </button>
+                <button onclick="showPage('home')" class="btn-massive mt-4">
+                    Go Back
+                </button>
+            </div>
+        </section>
+
     </main>
 
     <!-- Navigation Bar -->
@@ -235,9 +253,7 @@
     </nav>
 
     <script>
-        // Set API Key to empty string - environment will provide it automatically
-        const apiKey = "";
-        
+        let apiKey = localStorage.getItem('ninja_api_key') || "";
         let currentResult = null;
         let isLargeText = false;
         let favourites = JSON.parse(localStorage.getItem('ninja_favourites') || "[]");
@@ -251,16 +267,39 @@
         ];
 
         window.onload = () => {
+            // MAGIC LINK CHECK: Check if the URL has a ?setup=KEY parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            const setupKey = urlParams.get('setup');
+            
+            if (setupKey) {
+                localStorage.setItem('ninja_api_key', setupKey);
+                apiKey = setupKey;
+                // Clean the URL so Nana doesn't see the key in the bar
+                window.history.replaceState({}, document.title, window.location.pathname);
+                showMessage("Nana's Ninja is Ready! 🪄");
+            }
+
             loadRecipeOfDay();
             updateFavouritesList();
+            if (document.getElementById('api-key-input')) {
+                document.getElementById('api-key-input').value = apiKey;
+            }
         };
 
         function showPage(pageId) {
-            ['home', 'favourites', 'guide'].forEach(id => {
+            ['home', 'favourites', 'guide', 'settings'].forEach(id => {
                 document.getElementById(`page-${id}`).classList.add('hidden');
             });
             document.getElementById(`page-${pageId}`).classList.remove('hidden');
             window.scrollTo(0,0);
+        }
+
+        function saveApiKey() {
+            const val = document.getElementById('api-key-input').value.trim();
+            localStorage.setItem('ninja_api_key', val);
+            apiKey = val;
+            showMessage("Key Saved! ✅");
+            showPage('home');
         }
 
         function toggleTextSize() {
@@ -274,16 +313,24 @@
             const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
             const recipe = britishClassics[dayOfYear % britishClassics.length];
             const container = document.getElementById('recipe-of-the-day-content');
-            container.innerHTML = `
-                <h3 class="text-2xl font-bold text-amber-700">${recipe.name}</h3>
-                <p><strong>Mode:</strong> ${recipe.mode}</p>
-                <p><strong>Temp:</strong> ${recipe.temp}</p>
-                <p><strong>Time:</strong> ${recipe.time}</p>
-                <p class="mt-2">${recipe.instructions}</p>
-            `;
+            if (container) {
+                container.innerHTML = `
+                    <h3 class="text-2xl font-bold text-amber-700">${recipe.name}</h3>
+                    <p><strong>Mode:</strong> ${recipe.mode}</p>
+                    <p><strong>Temp:</strong> ${recipe.temp}</p>
+                    <p><strong>Time:</strong> ${recipe.time}</p>
+                    <p class="mt-2">${recipe.instructions}</p>
+                `;
+            }
         }
 
         async function callGemini(prompt, imageData = null) {
+            if (!apiKey) {
+                showMessage("The Magic Camera needs setting up. Tap the cog at the top!");
+                showPage('settings');
+                return;
+            }
+
             const loader = document.getElementById('loader');
             const resultArea = document.getElementById('result-area');
             const resultContent = document.getElementById('result-content');
@@ -310,7 +357,6 @@
             const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English. Return a JSON object with keys: foodName, mode, temperature, time, and instructions.";
 
             try {
-                // Exponential backoff retry logic
                 let response;
                 for (let i = 0; i < 5; i++) {
                     try {
@@ -338,7 +384,7 @@
                 return result;
 
             } catch (err) {
-                resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. Please try again in a moment.</p>`;
+                resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. Please check the internet.</p>`;
                 console.error(err);
             } finally {
                 loader.classList.add('hidden');
@@ -401,6 +447,7 @@
 
         function updateFavouritesList() {
             const list = document.getElementById('favourites-list');
+            if (!list) return;
             if (favourites.length === 0) {
                 list.innerHTML = `<p class="italic text-center">The tin is empty! Save some recipes from the Home screen.</p>`;
                 return;
