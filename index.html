@@ -273,7 +273,7 @@
     </nav>
 
     <script>
-        // GLOBAL STATE
+        // GLOBAL STATE - Ensured globally scoped to prevent ReferenceErrors
         window.tapCount = 0;
         window.tapTimer = null;
         let isLargeText = false;
@@ -396,8 +396,8 @@
             if (saveBtn) saveBtn.classList.add('hidden');
 
             // --- THE STABILITY FIX ---
-            // Detect if we should use the stable 'v1' or the testing 'v1beta' endpoint.
-            // Personal keys (Live Site) using 1.5-flash must use 'v1' to avoid 'model not found' errors.
+            // If we are on your GitHub site (isCanvasPreview is false), use the stable 'v1' endpoint.
+            // Personal free-tier keys are often rejected by the 'v1beta' endpoint for Flash 1.5.
             const usePreviewModel = isCanvasPreview && !hasSavedKey;
             const apiVersion = usePreviewModel ? "v1beta" : "v1";
             const modelName = usePreviewModel ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
@@ -406,7 +406,7 @@
             
             const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English with temperatures in Celsius. For recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up, return a JSON object with keys: responseText and instructions. Only return raw JSON.";
 
-            // Universal History Method: Move instructions into the history to bypass field errors.
+            // Universal History Method: Move instructions into history to bypass field errors on v1.
             if (chatHistory.length === 0) {
                 chatHistory.push({
                     role: "user",
@@ -428,14 +428,17 @@
             try {
                 let payload = { contents: chatHistory };
                 
-                // Adjust naming convention based on API version (v1 is snake_case, v1beta is camelCase)
+                // Adjust naming and config based on API version detected
                 if (apiVersion === "v1beta") {
+                    // v1beta uses camelCase
                     payload.generationConfig = { responseMimeType: "application/json" };
                 } else {
+                    // v1 uses snake_case for standard keys
                     payload.generation_config = { response_mime_type: "application/json" };
                 }
 
                 let response;
+                // Retry logic for unstable mobile connections
                 for (let i = 0; i < 5; i++) {
                     try {
                         response = await fetch(url, {
@@ -457,7 +460,7 @@
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
-                // Extraction regex to pull JSON out of any surrounding text
+                // Clean the text to ensure pure JSON is parsed
                 const jsonMatch = text.match(/\{[\s\S]*\}/);
                 if (jsonMatch) text = jsonMatch[0];
                 
