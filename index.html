@@ -272,9 +272,10 @@
     </nav>
 
     <script>
-        // GLOBAL SCOPE INITIALIZATION
-        let tapCount = 0;
-        let tapTimer = null;
+        // Define these at the very start to ensure handleSecretTap works correctly
+        window.tapCount = 0;
+        window.tapTimer = null;
+
         let isLargeText = false;
         let favourites = JSON.parse(localStorage.getItem('ninja_favourites') || "[]");
         let chatHistory = []; 
@@ -316,16 +317,16 @@
         };
 
         function handleSecretTap() {
-            tapCount++;
-            clearTimeout(tapTimer);
-            tapTimer = setTimeout(() => { tapCount = 0; }, 1000);
-            if (tapCount >= 5) {
+            window.tapCount++;
+            clearTimeout(window.tapTimer);
+            window.tapTimer = setTimeout(() => { window.tapCount = 0; }, 1000);
+            if (window.tapCount >= 5) {
                 const cog = document.getElementById('settings-cog');
                 if (cog) {
                     cog.classList.toggle('hidden');
                     showMessage(cog.classList.contains('hidden') ? "Settings Hidden" : "Settings Revealed! ⚙️");
                 }
-                tapCount = 0;
+                window.tapCount = 0;
             }
         }
 
@@ -392,19 +393,19 @@
             const saveBtn = document.getElementById('save-btn');
             if (saveBtn) saveBtn.classList.add('hidden');
 
-            // --- CRITICAL STABILITY LOGIC ---
-            // If on GitHub (Live Site), use v1 endpoint for maximum free-tier compatibility.
-            // If in Canvas, use v1beta for testing environment support.
-            const apiVersion = (isCanvasPreview && !hasSavedKey) ? "v1beta" : "v1";
+            // --- UNIVERSAL FIX ---
+            // Use v1beta for both environments. It handles camelCase naming better for structured responses.
+            const apiVersion = "v1beta"; 
             const modelName = (isCanvasPreview && !hasSavedKey) ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
             
             const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${currentKey}`;
             
-            // Conversation Injection: This is the only 100% reliable method to set persona without crashing on mobile.
+            // Conversation Injection: Bypass the buggy 'systemInstruction' field entirely.
+            // This works on every version of Gemini and stops "Unknown name" errors on mobile.
             if (chatHistory.length === 0) {
-                const nanaSystem = "You are 'Nana', an elderly British lady and Ninja CRISPi assistant. Use UK English. Give temps in Celsius. Reply ONLY with raw JSON containing: foodName, mode, temperature, time, and instructions. For follow-ups, use responseText and instructions.";
-                chatHistory.push({ role: "user", parts: [{ text: "SYSTEM INSTRUCTIONS: " + nanaSystem }] });
-                chatHistory.push({ role: "model", parts: [{ text: "Understood. Nana is ready to help." }] });
+                const nanaRules = "You are 'Nana', an elderly British lady and Ninja CRISPi assistant. Give instructions in simple British English with temps in Celsius. Return ONLY a raw JSON object containing: foodName, mode, temperature, time, and instructions. For chats, use responseText and instructions.";
+                chatHistory.push({ role: "user", parts: [{ text: "SYSTEM RULES: " + nanaRules }] });
+                chatHistory.push({ role: "model", parts: [{ text: "Understood. I will strictly act as Nana's assistant and reply in JSON format." }] });
             }
 
             let userParts = [{ text: newPrompt }];
@@ -415,15 +416,13 @@
             chatHistory.push({ role: "user", parts: userParts });
 
             try {
-                // Construct payload dynamically based on API version detected
-                let payload = { contents: chatHistory };
-                
-                if (apiVersion === "v1beta") {
-                    payload.generationConfig = { responseMimeType: "application/json" };
-                } else {
-                    // GA Standard fields use snake_case
-                    payload.generation_config = { response_mime_type: "application/json" };
-                }
+                // Simplified payload with standard camelCase keys for v1beta
+                let payload = {
+                    contents: chatHistory,
+                    generationConfig: { 
+                        responseMimeType: "application/json" 
+                    }
+                };
 
                 let response;
                 // Exponential backoff retry logic
@@ -448,7 +447,7 @@
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
-                // Robust JSON extraction (removes markdown if AI adds it)
+                // Sanitize JSON response strings (remove any markdown markers)
                 const jsonMatch = text.match(/\{[\s\S]*\}/);
                 if (jsonMatch) text = jsonMatch[0];
                 
@@ -460,9 +459,9 @@
                 return result;
 
             } catch (err) {
-                console.error("Connection Error:", err);
+                console.error("Final Connection Error:", err);
                 if (resultContent) {
-                    resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. (Error: ${err.message}). Please check the link I sent you.</p>`;
+                    resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. (Error: ${err.message}). Please check the setup link I sent you.</p>`;
                 }
             } finally {
                 if (loader) loader.classList.add('hidden');
