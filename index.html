@@ -274,8 +274,8 @@
     </nav>
 
     <script>
-        // Note: apiKey is provided by environment when empty
-        let apiKey = localStorage.getItem('ninja_api_key') || "";
+        // Use empty string to allow environment auto-injection in preview
+        const apiKey = localStorage.getItem('ninja_api_key') || "";
         let currentResult = null;
         let isLargeText = false;
         let favourites = JSON.parse(localStorage.getItem('ninja_favourites') || "[]");
@@ -297,9 +297,7 @@
             
             if (setupKey) {
                 localStorage.setItem('ninja_api_key', setupKey);
-                apiKey = setupKey;
-                window.history.replaceState({}, document.title, window.location.pathname);
-                showMessage("Nana's Ninja is Ready! 🪄");
+                window.location.href = window.location.pathname; // Reload without query params
             }
 
             loadRecipeOfDay();
@@ -309,7 +307,6 @@
             }
         };
 
-        // Secret: Tap Nana's face 5 times to show settings
         function handleSecretTap() {
             tapCount++;
             clearTimeout(tapTimer);
@@ -325,19 +322,19 @@
 
         function showPage(pageId) {
             ['home', 'favourites', 'guide', 'settings'].forEach(id => {
-                document.getElementById(`page-${id}`).classList.add('hidden');
+                const el = document.getElementById(`page-${id}`);
+                if (el) el.classList.add('hidden');
             });
-            document.getElementById(`page-${pageId}`).classList.remove('hidden');
+            const activePage = document.getElementById(`page-${pageId}`);
+            if (activePage) activePage.classList.remove('hidden');
             window.scrollTo(0,0);
         }
 
         function saveApiKey() {
             const val = document.getElementById('api-key-input').value.trim();
             localStorage.setItem('ninja_api_key', val);
-            apiKey = val;
             showMessage("Key Saved! ✅");
-            showPage('home');
-            document.getElementById('settings-cog').classList.add('hidden');
+            location.reload(); // Refresh to apply the new key
         }
 
         function toggleTextSize() {
@@ -372,7 +369,6 @@
             loader.classList.remove('hidden');
             document.getElementById('save-btn').classList.add('hidden');
 
-            // Use the specific model supported in the Canvas environment
             const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
             
             let userParts = [{ text: newPrompt }];
@@ -382,11 +378,10 @@
             
             chatHistory.push({ role: "user", parts: userParts });
 
-            const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English. For initial recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up questions, return a JSON object with keys: responseText and instructions (optional). Always use JSON format.";
+            const systemPrompt = "You are a helpful assistant for 'Nana', an elderly British lady using a Ninja CRISPi cooker. Give instructions in simple British English. For recipes, return a JSON object with keys: foodName, mode, temperature, time, and instructions. For follow-up questions, return a JSON object with keys: responseText and instructions (optional). Only return the JSON object.";
 
             try {
                 let response;
-                // Retry logic with exponential backoff
                 for (let i = 0; i < 5; i++) {
                     try {
                         response = await fetch(url, {
@@ -406,7 +401,10 @@
                 if (!response || !response.ok) throw new Error("API failed");
                 
                 const data = await response.json();
-                const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                
+                // Sanitize JSON response (remove markdown markers if present)
+                text = text.replace(/```json/g, '').replace(/```/g, '').trim();
                 const result = JSON.parse(text);
                 
                 chatHistory.push({ role: "model", parts: [{ text: text }] });
@@ -416,8 +414,8 @@
                 return result;
 
             } catch (err) {
-                resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. Please check the internet or your API key settings.</p>`;
-                console.error(err);
+                console.error("Gemini API Error:", err);
+                resultContent.innerHTML = `<p class="text-red-600">Sorry Nana, I'm having a bit of trouble connecting. Please check your internet or the API key in settings.</p>`;
             } finally {
                 loader.classList.add('hidden');
             }
