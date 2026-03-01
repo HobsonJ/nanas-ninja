@@ -273,7 +273,7 @@
     </nav>
 
     <script>
-        // GLOBAL STATE - Ensured globally scoped to prevent ReferenceErrors
+        // GLOBAL STATE
         window.tapCount = 0;
         window.tapTimer = null;
         let isLargeText = false;
@@ -281,7 +281,6 @@
         let chatHistory = []; 
         let currentResult = null;
 
-        // The platform provides the key if empty
         const apiKeyEnv = "";
 
         function getEffectiveKey() {
@@ -291,7 +290,7 @@
         }
 
         const britishClassics = [
-            { name: "Keighley Roast Chicken", mode: "Air Fry", temp: "190°C", time: "45-55 mins", instructions: "Season well. Place breast side down first, then flip halfway through." },
+            { name: "Ninja Roast Chicken", mode: "Air Fry", temp: "190°C", time: "45-55 mins", instructions: "Season well. Place breast side down first, then flip halfway through." },
             { name: "Crispy Fish Fingers", mode: "Max Crisp", temp: "210°C", time: "10-12 mins", instructions: "No need for extra oil. Shake halfway." },
             { name: "Quick Apple Crumble", mode: "Bake", temp: "170°C", time: "20 mins", instructions: "Cook fruit first for 5 mins, add topping, bake until golden." },
             { name: "Pork Sausages", mode: "Air Fry", temp: "180°C", time: "12-15 mins", instructions: "Prick skins slightly. Shake the basket halfway through." }
@@ -395,27 +394,26 @@
             const saveBtn = document.getElementById('save-btn');
             if (saveBtn) saveBtn.classList.add('hidden');
 
-            // --- THE BULLETPROOF FIX ---
-            // Live Site (isCanvasPreview is false) uses stable 'v1'.
-            // Testing environment (Goog hostname) uses 'v1beta'.
+            // --- THE STABILITY FIX ---
+            // GitHub site (Live) uses stable 'v1'. Preview environment uses 'v1beta'.
             const isGitHubSite = !isCanvasPreview || hasSavedKey;
             const apiVersion = isGitHubSite ? "v1" : "v1beta";
             const modelName = isGitHubSite ? "gemini-1.5-flash" : "gemini-2.5-flash-preview-09-2025";
             
             const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${currentKey}`;
             
-            // SYSTEM PERSONA - Shared with all context
-            const nanaContext = "You are 'Nana', a friendly elderly British lady from Oakworth, Keighley. You are an expert Ninja chef. You know specifically about Ninja Pot (OL650UK), Air Fryer (AF451UK), Slushy Machine (FS301UK), and Pizza Oven (OO101UK). Give instructions in simple British English with temps in Celsius. Reply strictly with raw JSON data containing: foodName, mode, temperature, time, and instructions. For chats, use responseText and instructions. Only return JSON.";
+            // SYSTEM PERSONA - STRICTLY NINJA CRISPI ONLY
+            const systemPrompt = "You are 'Nana', a friendly elderly British lady and expert on the Ninja CRISPi cooker. Give instructions in simple British English with temps in Celsius. Reply strictly with raw JSON data containing: foodName, mode, temperature, time, and instructions. For chats, use responseText and instructions. Only return JSON.";
 
-            // Universal History Method: Move instructions into the history to bypass payload errors on mobile.
+            // Universal History Method: Bypasses field errors on v1 by putting persona in history.
             if (chatHistory.length === 0) {
                 chatHistory.push({
                     role: "user",
-                    parts: [{ text: "SYSTEM INSTRUCTIONS: " + nanaContext }]
+                    parts: [{ text: "SYSTEM INSTRUCTIONS: " + systemPrompt }]
                 });
                 chatHistory.push({
                     role: "model",
-                    parts: [{ text: "Understood. I am Nana, Keighley's Ninja expert, and I will reply strictly in JSON format." }]
+                    parts: [{ text: "Understood. I am Nana, your Ninja CRISPi expert, and I will reply strictly in JSON format." }]
                 });
             }
 
@@ -427,17 +425,15 @@
             chatHistory.push({ role: "user", parts: userParts });
 
             try {
-                // Minimalist Payload to stop crashes on mobile
                 let payload = { contents: chatHistory };
                 
                 // CRITICAL: We DO NOT send generation_config or response_mime_type to v1 (stable).
-                // This is the source of the crash you saw in the browser.
+                // This prevents the "Unknown name" error in the browser.
                 if (apiVersion === "v1beta") {
                     payload.generationConfig = { responseMimeType: "application/json" };
                 }
 
                 let response;
-                // Exponential backoff retry logic
                 for (let i = 0; i < 5; i++) {
                     try {
                         response = await fetch(url, {
@@ -459,7 +455,7 @@
                 const data = await response.json();
                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
-                // Clean the text to ensure pure JSON is parsed (Essential for v1 which may add markdown)
+                // Robust extraction: ensure pure JSON is parsed regardless of surrounding chat text.
                 const jsonMatch = text.match(/\{[\s\S]*\}/);
                 if (jsonMatch) text = jsonMatch[0];
                 
@@ -489,7 +485,7 @@
                 resultContent.innerHTML = `
                     <h3 class="text-3xl font-bold mb-2">${result.foodName}</h3>
                     <div class="bg-amber-100 p-4 rounded-xl border-2 border-black mb-4">
-                        <p><strong>Ninja Setting:</strong> ${result.mode}</p>
+                        <p><strong>Ninja CRISPi Setting:</strong> ${result.mode}</p>
                         <p><strong>Temperature:</strong> ${result.temperature}°Celsius</p>
                         <p><strong>Time:</strong> ${result.time}</p>
                     </div>
@@ -528,7 +524,7 @@
             reader.onload = async (e) => {
                 const base64 = e.target.result.split(',')[1];
                 resetApp(false); 
-                await callGemini("Identify this food in the photo and give Ninja settings (Mode, Temp in C, Time).", base64);
+                await callGemini("Identify this food in the photo and give Ninja CRISPi settings (Mode, Temp in C, Time).", base64);
             };
             reader.readAsDataURL(file);
         }
@@ -541,7 +537,7 @@
                 return;
             }
             resetApp(false); 
-            await callGemini(`I have these ingredients: ${ingredients}. Suggest a meal for one of my Ninja appliances.`);
+            await callGemini(`I have these ingredients: ${ingredients}. Suggest a meal for my Ninja CRISPi.`);
         }
 
         function resetApp(hideArea = true) {
